@@ -2864,6 +2864,8 @@ XRULES = [(k, sev, re.compile(rx, re.I), txt) for k, sev, rx, txt in [
     ("enc", "info", r"encrypt info:", "Encryption parameters seen on a voice call"),
     ("key", "ok", r"loaded key", "An encryption key from your Keys list was loaded into OP25"),
     ("voice", "info", r"voice update:", "Receiver followed a voice call"),
+    # OP25's audio websocket logs "[error] handle_read_frame error: ... End of File" whenever a browser tab closes or reloads
+    ("ws_close", "info", r"websocketpp|handle_read_frame", "An audio client (browser tab) disconnected from OP25"),
     ("sw_err", "crit", r"Traceback|Exception|\bError\b|error:", "OP25 reported a software error"),
 ]]
 
