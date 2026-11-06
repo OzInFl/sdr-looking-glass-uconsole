@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CC Viewer</title>
+<style>
+  :root{--bg:#0f0d0b;--panel:#1a1714;--panel2:#231f1b;--line:#3a3027;--txt:#f3ece4;--mut:#a8998a;--acc:#ff7a1a;--acc2:#ffb066;
+        --ok:#4ade80;--warn:#facc15;--bad:#f87171;--blue:#38bdf8;--z:1}
+  *{box-sizing:border-box}
+  html{font-size:calc(19px * var(--z))}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:1rem;line-height:1.3}
+  button,select,input{font:inherit;color:inherit}
+  button{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:.35rem .8rem;cursor:pointer;white-space:nowrap}
+  button:hover{border-color:var(--acc)} button:disabled{opacity:.45;cursor:default}
+  button.pri{background:var(--acc);border-color:var(--acc);color:#140c05;font-weight:800}
+  button.stop{background:#7f1d1d;border-color:#b91c1c;color:#fff;font-weight:800}
+  button.on{background:rgba(255,122,26,.2);border-color:var(--acc);color:#fff}
+  select,input{background:#0b0a09;border:1px solid var(--line);border-radius:10px;padding:.35rem .6rem}
+  header{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;padding:.45rem .7rem;background:var(--panel);border-bottom:1px solid var(--line)}
+  .brand{font-weight:900;color:var(--acc);font-size:1.05rem}
+  #sysSel{width:15rem} #ccSel{width:8.2rem}
+  header button{padding:.3rem .6rem}
+  .sp{flex:1}
+  .pill{padding:.25rem .65rem;border-radius:999px;border:1px solid var(--line);background:#0b0a09;font-weight:700;font-variant-numeric:tabular-nums}
+  #ident{display:grid;grid-template-columns:.85fr 1.05fr .7fr .55fr .55fr 1.35fr .75fr 1fr 1fr;gap:1px;background:var(--line);border-bottom:1px solid var(--line)}
+  #ident div{background:var(--panel2);padding:.3rem .5rem;min-width:0}
+  #ident .k{font-size:.68rem;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+  #ident .v{font-size:1.2rem;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  nav{display:flex;gap:.3rem;padding:.4rem .7rem;flex-wrap:wrap;background:#141210;border-bottom:1px solid var(--line)}
+  nav button{font-size:1rem;padding:.35rem .9rem;color:var(--mut)}
+  nav button.active{color:#fff;background:rgba(255,122,26,.2);border-color:var(--acc)}
+  nav .n{font-size:.75rem;color:var(--acc2);margin-left:.3rem}
+  main{padding:.6rem .7rem}
+  .tab{display:none} .tab.active{display:block}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(18rem,1fr));gap:.6rem}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:.55rem .75rem}
+  .card h3{margin:0 0 .35rem;font-size:.85rem;color:var(--acc2);text-transform:uppercase;letter-spacing:.06em}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:.12rem .8rem}
+  .kv .k{color:var(--mut)} .kv .v{font-weight:700;font-variant-numeric:tabular-nums;text-align:right;overflow-wrap:anywhere}
+  table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+  th{text-align:left;font-size:.75rem;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;padding:.3rem .45rem;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg)}
+  td{padding:.3rem .45rem;border-bottom:1px solid #2a241f;vertical-align:top}
+  tr.w td{background:rgba(255,122,26,.09)}
+  .mut{color:var(--mut)} .small{font-size:.8rem} .mono{font-family:ui-monospace,Consolas,monospace;font-size:.85rem}
+  .b{display:inline-block;padding:.05rem .45rem;border-radius:6px;font-size:.75rem;font-weight:800;margin-right:.2rem;border:1px solid var(--line)}
+  .b.g{color:#052e12;background:var(--ok);border-color:var(--ok)} .b.r{color:#fff;background:#b91c1c;border-color:#b91c1c}
+  .b.y{color:#1c1500;background:var(--warn);border-color:var(--warn)} .b.bl{color:#03202e;background:var(--blue);border-color:var(--blue)}
+  .b.o{color:#140c05;background:var(--acc);border-color:var(--acc)}
+  .row{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:.5rem}
+  .empty{color:var(--mut);padding:1rem;text-align:center}
+  .feed td{padding:.25rem .45rem}
+  .big{font-size:2.2rem;font-weight:900;font-variant-numeric:tabular-nums}
+  .seekbtn{font-size:1.3rem;padding:.6rem 1.4rem;font-weight:800}
+  .bar{height:.6rem;background:#0b0a09;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  .bar>div{height:100%;background:linear-gradient(90deg,var(--bad),var(--warn) 45%,var(--ok))}
+  a{color:var(--acc2)}
+  tr.mh td{border-bottom:none}
+  tr.md td{padding:.05rem .45rem .5rem 1.4rem;color:#cfeaff;font-size:.92rem;border-bottom:1px solid #2a241f}
+  .dec{color:#cfeaff;font-family:system-ui,sans-serif;font-size:.85rem;margin-top:.15rem}
+  .dec:before,tr.md td:before{content:"\21B3  ";color:var(--blue)}
+  .fd{border-left:6px solid var(--line);background:var(--panel2);border-radius:8px;padding:.35rem .6rem;margin:.3rem 0}
+  .fd.crit{border-color:var(--bad);background:rgba(248,113,113,.14)} .fd.warn{border-color:var(--warn);background:rgba(250,204,21,.08)}
+  .fd.ok{border-color:var(--ok)} .fd.info{border-color:var(--blue)}
+  .fd .ft{font-weight:800} .fd.crit .ft{color:#fecaca} .fd.warn .ft{color:#fde68a}
+  .fd .fdd{color:#e9dfd4;font-size:.92rem} .fd .ffx{color:var(--acc2);font-size:.85rem;margin-top:.1rem}
+  .chip{padding:.3rem .8rem;border-radius:10px;font-weight:900;font-size:1.1rem;border:1px solid var(--line)}
+  .chip.crit{background:#7f1d1d;border-color:var(--bad)} .chip.warn{background:#4a3b05;border-color:var(--warn)}
+  .chip.ok{background:#0d3b1f;border-color:var(--ok)} .chip.info{background:#06324a;border-color:var(--blue)}
+  #toast{position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--acc);padding:.5rem 1rem;border-radius:10px;display:none;z-index:9}
+</style></head>
+<body>
+<header>
+  <select id="sysSel" title="System"></select>
+  <select id="ccSel" title="Control channel to start on"></select>
+  <button id="runBtn" class="pri">&#9654; Run</button>
+  <button id="ccOnly" title="CC-only: stay on the control channel, never follow voice (captures every CC message)">CC-only</button>
+  <button id="seekDn" title="Seek down to the next system">&#9664;&#9664; Seek</button>
+  <button id="seekUp" title="Seek up to the next system">Seek &#9654;&#9654;</button>
+  <span class="sp"></span>
+  <span class="pill" id="stPill">—</span>
+  <button id="zm" title="smaller text">A&minus;</button><button id="zp" title="larger text">A+</button>
+  <button id="coScreen" title="uConsole screen + app launcher in this browser (remote console)" onclick="window.open('https://'+location.hostname+':6080/','co-screen')">&#128421; Screen</button><script>if(/^(127\.|localhost$|\[?::1)/.test(location.hostname))document.getElementById('coScreen').style.display='none'</script>
+  <button id="fsBtn" title="fullscreen">&#x26F6;</button>
+</header>
+<div id="tempBar" style="display:none;align-items:center;gap:.6rem;padding:.4rem .7rem;background:rgba(56,189,248,.14);border-bottom:1px solid var(--blue)">
+  <span class="b bl">UNSAVED</span><span id="tempTxt" style="flex:1"></span>
+  <button id="tempSave" class="pri">&#128190; Save</button><button id="tempDisc">Discard</button></div>
+<div id="ident"></div>
+<nav id="tabs"></nav>
+<main>
+  <section class="tab" data-tab="system"><div class="grid" id="sysGrid"></div></section>
+  <section class="tab" data-tab="adjacent"><div id="adjBox"></div></section>
+  <section class="tab" data-tab="iden"><div id="idenBox"></div></section>
+  <section class="tab" data-tab="msgs"><div id="msgBox"></div></section>
+  <section class="tab" data-tab="diag">
+    <div class="row" id="dgSum"></div><div id="dgBox"></div></section>
+  <section class="tab" data-tab="activity">
+    <div class="row" id="actFilt"></div><div id="actBox"></div></section>
+  <section class="tab" data-tab="watch">
+    <div class="row">
+      <input id="ridIn" placeholder="Radio ID" inputmode="numeric" size="10">
+      <button id="ridAdd" class="pri">+ Watch</button>
+      <span class="sp"></span>
+      <button id="wcAll" title="clear the kept history of every watched radio">Clear all</button>
+      <button id="wsBtn">&#9654; Start watch report</button>
+      <span class="mut small" id="wsInfo"></span>
+    </div>
+    <div class="grid" id="watchBox"></div>
+    <div class="card" style="margin-top:.6rem"><h3>Reports</h3><div id="repBox" class="small"></div></div>
+    <div class="card" style="margin-top:.6rem"><h3>Radios heard (tap &#9733; to watch)</h3><div id="radBox"></div></div>
+  </section>
+  <section class="tab" data-tab="seek">
+    <div class="row">
+      <button class="seekbtn" id="seekDn2">&#9664;&#9664; Seek Down</button>
+      <button class="seekbtn" id="seekUp2">Seek Up &#9654;&#9654;</button>
+      <button id="seekStop" class="stop">&#9632; Stop</button>
+      <label class="mut">from <input id="seekFrom" size="9" placeholder="MHz"></label>
+      <button class="seekbtn" id="huntBtn" title="Sweep the whole band and list every system (nothing is saved)">&#127919; Hunt band</button>
+      <label class="mut">band <select id="seekBand"></select></label>
+      <label class="mut">find <select id="seekMode"><option value="system">systems</option><option value="site">every site</option></select></label>
+    </div>
+    <div class="card"><h3>Seek status</h3><div id="seekStat"></div></div>
+    <div id="seekRes" style="margin-top:.6rem"></div>
+  </section>
+  <section class="tab" data-tab="raw">
+    <div class="row"><input id="rawFilt" placeholder="filter (e.g. adj, iden, 0x3a, a RID)" size="30"><button id="rawPause">&#10074;&#10074; Pause</button></div>
+    <div id="rawBox"></div></section>
+</main>
+<div id="toast"></div>
+<script>
+const $=id=>document.getElementById(id);
+const E=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const V=(x,d='—')=>(x===null||x===undefined||x==='')?d:x;
+const TABS=[['system','System'],['adjacent','Adjacent sites'],['iden','IDEN / band plan'],['msgs','CC messages'],['diag','Diagnostics'],['activity','Activity'],['watch','Watch'],['seek','System Hunter'],['raw','Raw']];
+let D=null, TAB='system', ACT='all', RAWP=false, Z=1, EVALL=false;
+try{TAB=localStorage.getItem('cc_tab')||TAB; Z=parseFloat(localStorage.getItem('cc_z'))||1; EVALL=localStorage.getItem('cc_evall')==='1';}catch(e){}
+if(location.hash.length>1)TAB=location.hash.slice(1);   // /cc#adjacent opens a tab directly
+const MSGN={grp_v_ch_grant:'Group voice grant',grp_v_ch_grant_up:'Group grant update',grp_v_ch_grant_up_exp:'Group grant update (explicit)',
+  uu_v_ch_grant:'Unit-to-unit voice grant',uu_ans_req:'Unit-to-unit answer request',grp_aff_rsp:'Group affiliation response',loc_reg_rsp:'Location registration response',
+  u_reg_rsp:'Unit registration response',u_de_reg_ack:'De-registration acknowledge',u_reg_cmd:'Unit registration command',
+  rfss_sts_bcst:'RFSS status broadcast',net_sts_bcst:'Network status broadcast',adj_sts_bcst:'Adjacent site status',
+  iden_up:'Identifier update (band plan)',iden_up_tdma:'Identifier update - TDMA',iden_up_vu:'Identifier update - VHF/UHF',
+  sccb:'Secondary control channel',sccb_exp:'Secondary control channel (explicit)',sys_srv_bcst:'System service broadcast',
+  time_date_ann:'Time & date announcement',tdma_sync_bcst:'TDMA sync broadcast',p_parm_bcst:'Protection parameter broadcast',
+  pwr_ctl_sig_qual:'Power control / signal quality',MAC_Release:'MAC release',sndcp_data_ch:'SNDCP data channel announce',
+  grg_exenc_cmd:'Group regroup (explicit encryption)',ack_rsp_fne:'Acknowledge response (FNE)',deny_rsp:'Deny response',
+  queued_rsp:'Queued response',ext_fnct_cmd:'Extended function command',status_update:'Status update',call_alert:'Call alert',unhandled:'Unhandled / undecoded opcode'};
+Object.assign(MSGN,{grp_v_ch_usr:'Voice channel user',grp_v_ch_up:'Group grant update',grp_v_ch__grant:'Group voice grant',sn_data_chn_gnt:'Data channel grant',
+  grp_aff_q:'Affiliation query',mot_bsi_grant:'Motorola station ID',mac_mot_bsi:'Motorola station ID',call_term_rel:'Call termination',lc_source_id_ext:'Roaming talker ID',
+  mfid90_grg_add_cmd:'Motorola patch add',mfid90_grg_ch_grant:'Motorola patch grant',mfid90_grg_ch_grant_up:'Motorola patch grant update',
+  mfid90_grg_cn_grant_exp:'Motorola patch grant (explicit)',grp_regrp_v_ch_usr:'Regroup channel user',grp_regrp_v_ch_grant:'Regroup voice grant',
+  grp_regrp_v_ch_up:'Regroup grant update',grp_regrp_ch_up:'Regroup grant update',grp_regrp_add:'Regroup add',grg_regrp_exenc_cmd:'Regroup command (encryption)'});
+const opNm=op=>{const n=op.split(' ').pop();return MSGN[n]||n;};
+
+// ---- plain-English decoder for CC messages: OP25's "key: value" text -> a sentence with the values filled in
+const KV=t=>{const o={};String(t||'').replace(/([A-Za-z][\w/-]*): (\S+)/g,(m,k,v)=>{o[k]=v.replace(/[:,]+$/,'');});return o;};
+const HX=v=>(v==null||v==='')?null:parseInt(String(v).replace(/^0x/i,''),16);
+const UP=v=>String(v??'').replace(/^0x/i,'').toUpperCase()||'?';
+const FQ=v=>{const m=String(v??'').match(/(\d{2,4}\.\d+)/);return m?parseFloat(m[1]).toFixed(5)+' MHz':null;};
+const ALG={0x80:'unencrypted',0x81:'DES-OFB',0x83:'Triple-DES',0x84:'AES-256',0x85:'AES-128',0x9f:'DES-XL',0xaa:'ADP (RC4)'};
+const RV=v=>({0:'ACCEPTED ✅',1:'FAILED ❌',2:'DENIED ⛔',3:'REFUSED ⛔'}[+v]??('result code '+v));
+const MFID={0:'standard P25',1:'standard P25',0x90:'Motorola',0xa4:'L3Harris',0xd8:'Tait'};
+const STDOP={0x04:'unit-to-unit voice grant',0x05:'unit-to-unit answer request',0x06:'unit-to-unit grant update',0x08:'telephone interconnect grant',
+  0x09:'telephone interconnect grant update',0x0a:'telephone answer request',0x14:'data channel grant',0x15:'data page request',0x16:'data channel announcement',
+  0x18:'status update',0x1a:'status query',0x1c:'short message',0x1d:'radio unit monitor command',0x1f:'call alert (page a radio)',0x20:'acknowledge response',
+  0x21:'queued response: the system is busy and the request is waiting for a free channel',0x24:'extended function command (e.g. radio check / inhibit)',
+  0x27:'deny response: a request was refused',0x2d:'unit registration command',0x2e:'authentication command',0x36:'roaming address command',0x37:'roaming address update'};
+const MOTOP={0x05:'traffic channel ID',0x09:'system loading / status',0x0b:'base station ID',0x0e:'planned control channel shutdown'};   // community-reported names
+let TGN={},RIDN={};
+function names(){TGN={};RIDN={};(D.talkgroups||[]).forEach(t=>{if(t.tag)TGN[t.tgid]=t.tag;});(D.radios||[]).forEach(r=>{if(r.alias)RIDN[r.rid]=r.alias;});}
+const TG=g=>g==null?'a talkgroup':`talkgroup ${g}${TGN[g]?' “'+TGN[g]+'”':''}`;
+const RD=r=>r==null?'a radio':(+r===0?'an unidentified radio (ID not sent)':`radio ${r}${RIDN[r]?' “'+RIDN[r]+'”':''}`);
+const UTC=m=>{m=+m;if(isNaN(m))return '?';const s=m<0?'−':'+';m=Math.abs(m);return `UTC${s}${Math.floor(m/60)}:${String(m%60).padStart(2,'0')}`;};
+const OFF=v=>{const x=parseFloat(v);return isNaN(x)?'?':x>0?x+' MHz above':x<0?(-x)+' MHz below':'on the same frequency as';};
+function OPT(o){const v=HX(o);if(v==null||isNaN(v))return '';const f=[];if(v&0x80)f.push('🚨 EMERGENCY');f.push(v&0x40?'🔒 encrypted':'not encrypted');
+  if(v&0x20)f.push('full duplex');if(v&0x10)f.push('packet mode');f.push('priority '+(v&7));return ' ('+f.join(', ')+')';}
+const uniq=a=>a.filter((x,i)=>x[1]!=null&&a.findIndex(y=>y[0]===x[0]&&y[1]===x[1])===i);
+const GUP=k=>`Call still going: ${uniq([[k.ch1||k.f1||k['f1-t']||k.freq1,k.ga1??k.sg1],[k.ch2||k.f2||k['f2-t']||k.freq2,k.ga2??k.sg2],[k.f3,k.ga3]]).map(x=>TG(x[1])+' on '+(FQ(x[0])||'?')).join(' and ')}. Repeated so radios that just switched on or arrived can still join the call.`;
+const ADJF=k=>[k.A==='1'?'linked to the network ✅':k.A==='0'?'NOT linked to the network (site trunking) ⚠️':'',k.F==='1'?'in FAILSOFT ⚠️':'',k.C==='1'?'conventional (not trunked)':'',k.V==='0'?'info may be out of date':''].filter(Boolean).join(', ');
+const DEC={
+  grp_v_ch_grant:k=>`Call start: ${RD(k.sa)} was given a voice channel for ${TG(k.ga)} on ${FQ(k.freq||k.ch||k['freq-t'])||'?'}${OPT(k.opts)}. Radios on that talkgroup tune there to hear it.`,
+  grp_v_ch__grant:k=>`Call start: ${TG(k.ga)} was given a voice channel (${k.ch1||'?'})${OPT(k.opts)}.`,
+  grp_v_ch_grant_up:GUP, grp_v_ch_up:GUP,
+  grp_v_ch_grant_up_exp:k=>`Call still going on an explicit channel: ${TG(k.ga)}, radios listen on ${FQ(k['freq-t'])||'?'} and transmit on ${FQ(k['freq-r'])||'?'}${OPT(k.opts)}.`,
+  grp_v_ch_usr:k=>`On the voice channel right now: ${RD(k.sa)} is talking on ${TG(k.ga)}${OPT(k.opts)}.`,
+  iden_up:k=>`Band plan entry #${k.id} (Phase I FDMA): channel numbers tagged #${k.id} start at ${FQ(k.freq)||'?'} and step ${+k.spac} kHz${k.bw?', each '+(HX(k.bw)*0.125)+' kHz wide':''}. Radios transmit ${OFF(k.toff)} what they receive. Radios use this table to turn a channel number into a frequency.`,
+  iden_up_tdma:(k,kd,t)=>{const sl=(t.match(/slots\/carrier:? (\d+)/)||[])[1];return `Band plan entry #${k.id} is Phase II TDMA: starts at ${FQ(k.freq||k.base_f)||'?'}, steps ${+(k.spac||k.spacing)} kHz, ${sl||'?'} time slots per carrier (each voice frequency carries ${sl||'?'} calls at once). Radios transmit ${OFF(k.toff||k.offset)} what they receive.`;},
+  iden_up_vu:k=>`Band plan entry #${k.id} (VHF/UHF): starts at ${FQ(k.freq)||'?'}, steps ${+k.spac} kHz${k.bw?', '+({4:'6.25',5:'12.5'}[HX(k.bw)]||'?')+' kHz wide':''}. Radios transmit ${OFF(k.toff)} what they receive.`,
+  net_sts_bcst:k=>`Network identity: this is WACN ${UP(k.wacn)} / System ID ${UP(k.syid||k.sys)}${k.lra?', location registration area '+k.lra:''}, control channel ${FQ(k.ch1||k.ch)||'?'}. Radios check WACN + System ID to know they are on their home system; moving to a site with a different area makes them re-register.`,
+  rfss_sts_bcst:(k,kd)=>`Site identity: System ${UP(k.syid||k.sys)}, RFSS ${HX(k.rfid)}, Site ${kd==='tsbk'?k.stid:HX(k.stid)}, control channel ${FQ(k.ch1||k.ch)||'?'}. `+
+    (k.A==='1'?'✅ The site is linked to the network controller, so wide-area calls work.':k.A==='0'?'⚠️ SITE TRUNKING: the site lost its link to the controller; only radios on this site can talk to each other.':''),
+  adj_sts_bcst:(k,kd)=>k.rfid==null?`Neighbour-list follow-up: that neighbour's channel table starts at ${FQ(k.freq)||'?'} with ${k.step||'?'} steps.`:
+    `Neighbour site: ${k.syid?'System '+UP(k.syid)+', ':''}RFSS ${HX(k.rfid)} Site ${kd==='tsbk'?k.stid:HX(k.stid)} has its control channel on ${FQ(k.ch1||k.ch||k.f1)||'?'}${ADJF(k)?' and is '+ADJF(k):''}. Radios move to a neighbour like this when the signal here gets weak (roaming).`,
+  sccb:(k,kd)=>`Secondary control channels for RFSS ${HX(k.rfid)} Site ${kd==='tsbk'?k.stid:HX(k.stid)}: ${[k.ch1,k.ch2,k['freq-t']].map(FQ).filter(Boolean).join(', ')||'none'}. Backup CCs the site can switch to if the main one fails.`,
+  sndcp_data_ch:k=>/^f+$/i.test(k.ch1||'')?'Data channel announcement: this site has no dedicated packet-data channel right now (ffff = none).':`Packet data (SNDCP) is offered on ${FQ(k.ch1)||'channel '+k.ch1}.`,
+  sn_data_chn_gnt:k=>`Data channel grant: ${RD(k.ta)} was given a packet-data channel ${FQ(k.ch1)||k.ch1||''}.`,
+  tdma_sync_bcst:(k,kd,t)=>{const tm=(t.match(/time: \S+ (\d+:\d+:\d+)/)||[])[1];return `Phase II timing beacon: the system clock says ${tm||'?'} UTC${k.us==='1'?' (locked to UTC)':''}; local time is ${UTC(k.lto_min)}${k.vl==='1'?'':' (local offset not marked valid)'}. TDMA radios use it to line up their time slots.`;},
+  time_date_ann:k=>`Time announcement: local time is ${UTC(k.utc_offset_min)}${k.vl==='1'?'':' (not marked valid)'}.`,
+  sys_srv_bcst:k=>`System services: available 0x${k.avail} / supported 0x${k.supp} (bit flags for features such as voice, data, registration and encryption), request priority ${k.prio}. Tells radios what this site offers.`,
+  p_parm_bcst:k=>`Protection parameter: encrypted traffic on this system uses ${ALG[HX(k.algid)]||'algorithm'} (ALGID 0x${UP(k.algid)}).`,
+  pwr_ctl_sig_qual:k=>{const rf=HX(k.rf),b=HX(k.ber);return `Uplink report: the site heard ${RD(k.ta)} at RF level ${rf}/15 with bit-error level ${b}/15 (0 = clean)${b>=6?' ⚠️ poor':''}. Sent so the radio can adjust its transmit power.`;},
+  MAC_Release:k=>`Channel release: ${RD(k.sa)}'s call ended${k.uf==='1'?' (forced off by the system)':''}.`,
+  grp_aff_rsp:k=>`Talkgroup join answer: ${RD(k.ta)} asked to join ${TG(k.ga)}: ${RV(k.gav)}.`+(+k.gav?' The system would not let this radio join (not allowed on this talkgroup/site, or not in the system database).':''),
+  loc_reg_rsp:k=>`Location registration answer: ${RD(k.ta)} on ${TG(k.ga)} at RFSS ${HX(k.rfid)} Site ${HX(k.stid)}: ${RV(k.rv)}.`,
+  u_reg_rsp:k=>`Log-on answer: ${RD(k.sa)} (unit ID ${k.sid}) asked to register on System ${UP(k.syid)}: ${RV(k.rv)}.`+(+k.rv?' The system rejected the radio.':''),
+  u_de_reg_ack:k=>`Log-off: radio ${k.sid} de-registered from System ${UP(k.syid)} (powered off, changed system, or left coverage).`,
+  grp_aff_q:k=>`Affiliation query: the system asked ${RD(k.ta)} which talkgroup it is on.`,
+  ack_rsp_fne:k=>`Acknowledgement: the system confirmed ${RD(k.sa)}'s request (service 0x${k.svc})${k.ta?' to '+RD(k.ta):''}.`,
+  grg_exenc_cmd:k=>`Regroup command: dispatch is patching${k.grg_g==='1'?' talkgroups':' radios'} into supergroup ${k.sg} (key ID ${k.keyid}, target ${k.rta}).`,
+  grg_regrp_exenc_cmd:k=>`Regroup command: supergroup ${k.sg} with ${k.wgids||'?'} (key ID ${k.keyid}, ${ALG[HX(k.algid)]||'ALGID '+k.algid}).`,
+  mfid90_grg_add_cmd:k=>`Motorola patch: ${[k.ga1,k.ga2,k.ga3].filter((g,i,a)=>g&&a.indexOf(g)===i).map(TG).join(', ')} are patched into supergroup ${k.sg}; a call on any of them is heard on all.`,
+  mfid90_grg_ch_grant:k=>`Motorola patch call: ${RD(k.sa)} was given ${FQ(k.freq)||'?'} for patched supergroup ${k.sg}.`,
+  mfid90_grg_ch_grant_up:k=>`Patch call still going: supergroup ${k.sg1} on ${FQ(k.freq1)||'?'}${k.sg2&&k.sg2!==k.sg1?', supergroup '+k.sg2+' on '+(FQ(k.freq2)||'?'):''}.`,
+  mfid90_grg_cn_grant_exp:k=>`Patch call (explicit channel): supergroup ${k.sg}.`,
+  grp_regrp_v_ch_usr:k=>`Regrouped call: ${RD(k.sa)} is talking on supergroup ${k.sg}.`,
+  grp_regrp_v_ch_grant:k=>`Regrouped call start: ${RD(k.sa)} was given ${FQ(k.freq||k['freq-t'])||'?'} for supergroup ${k.sg}.`,
+  grp_regrp_v_ch_up:k=>`Regrouped call still going: supergroup ${k.sg} on ${FQ(k.freq)||'?'}.`,
+  grp_regrp_ch_up:k=>`Regrouped calls still going: supergroup ${k.sg1} on ${FQ(k.f1)||'?'}.`,
+  grp_regrp_add:k=>`Regroup: talkgroups ${k.wg_list||'?'} added to supergroup ${k.sg}.`,
+  mot_bsi_grant:k=>`Motorola station ID: the site identifies itself as “${k.bsi}” (its Morse-code ID).`, mac_mot_bsi:k=>`Motorola station ID: “${k.bsi}”.`,
+  call_term_rel:k=>`Call ended for ${RD(k.sa)}.`,
+  lc_source_id_ext:k=>`Roaming talker: ${RD(k.sid)} belongs to network ${k.netid} / System ${k.sysid}, i.e. it is visiting from another system.`,
+  unhandled:(k,kd,t)=>{const h=(t.match(/0x([0-9a-f]{4,})/i)||[])[1];if(!h||kd!=='tsbk')return "OP25 doesn't decode this message type.";
+    const op=parseInt(h.slice(0,2),16)&0x3f,mf=parseInt(h.slice(2,4),16),std=mf<2,nm=std?STDOP[op]:mf===0x90?MOTOP[op]:null;
+    return `OP25 doesn't decode this one: opcode 0x${op.toString(16).padStart(2,'0')} from ${MFID[mf]||'manufacturer'} (MFID 0x${mf.toString(16)})`+
+      (nm?(std?`: ${nm}.`:`, probably “${nm}”.`):'.')+(std?'':' Vendor-specific housekeeping; safe to ignore.');},
+};
+function decode(op,text,dec){if(dec)return dec;try{const f=DEC[op.split(' ').pop()];return f?f(KV(text),op.split('(')[0],String(text||'')):'';}catch(e){return '';}}
+
+function toast(t){const el=$('toast');el.textContent=t;el.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>el.style.display='none',3500);}
+async function api(path,body){try{const r=await fetch(path,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const j=await r.json().catch(()=>({}));if(!r.ok&&j.err)toast(j.err);return j;}catch(e){toast('backend not reachable');return {};}}
+
+// ---- tabs (Left/Right arrows switch when not typing)
+$('tabs').innerHTML=TABS.map(([k,t])=>`<button data-t="${k}">${t}<span class="n" id="n-${k}"></span></button>`).join('');
+function setTab(t){TAB=t;try{localStorage.setItem('cc_tab',t);}catch(e){}
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active',b.dataset.t===t));
+  document.querySelectorAll('.tab').forEach(s=>s.classList.toggle('active',s.dataset.tab===t)); render();}
+$('tabs').onclick=e=>{const b=e.target.closest('[data-t]');if(b)setTab(b.dataset.t);};
+document.addEventListener('keydown',e=>{if(/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName))return;
+  const i=TABS.findIndex(x=>x[0]===TAB);
+  if(e.key==='ArrowRight'){setTab(TABS[(i+1)%TABS.length][0]);e.preventDefault();}
+  if(e.key==='ArrowLeft'){setTab(TABS[(i+TABS.length-1)%TABS.length][0]);e.preventDefault();}});
+function zoom(d){Z=Math.max(.8,Math.min(1.8,Math.round((Z+d)*10)/10));document.documentElement.style.setProperty('--z',Z);try{localStorage.setItem('cc_z',Z);}catch(e){}}
+$('zm').onclick=()=>zoom(-.1); $('zp').onclick=()=>zoom(.1); zoom(0);
+$('fsBtn').onclick=()=>{if(document.fullscreenElement)document.exitFullscreen();else document.documentElement.requestFullscreen().catch(()=>{});};
+
+// ---- header controls
+let selTouched=false;
+$('sysSel').onchange=()=>{selTouched=true;fillCC();updRun();};
+function fillCC(){const s=D&&D.systems[$('sysSel').value];const cur=$('ccSel').value;
+  $('ccSel').innerHTML='<option value="">CC: auto</option>'+((s&&s.ccs)||[]).map(c=>`<option value="${E(c)}">${fmtMHz(c)}</option>`).join('');
+  if([...$('ccSel').options].some(o=>o.value===cur))$('ccSel').value=cur;}
+function running(){return D&&D.op25.running&&!D.scan.running;}
+function updRun(){const b=$('runBtn');if(!D)return;const same=$('sysSel').value===D.active;
+  if(running()&&same){b.className='stop';b.innerHTML='&#9632; Stop';}else{b.className='pri';b.innerHTML='&#9654; Run';}
+  b.disabled=D.scan.running;}
+$('runBtn').onclick=async()=>{if(!D)return;
+  if(running()&&$('sysSel').value===D.active){await api('/api/control',{action:'stop'});toast('stopped');}
+  else{const r=await api('/api/switch',{id:$('sysSel').value,cc:$('ccSel').value||null,cc_only:$('ccOnly').classList.contains('on')});
+    if(r.ok)toast('running '+(D.systems[$('sysSel').value]||{}).name);}
+  selTouched=false;poll();};
+$('ccOnly').onclick=async()=>{const on=!$('ccOnly').classList.contains('on');$('ccOnly').classList.toggle('on',on);
+  if(running()){await api('/api/ccmode',{on});toast('CC-only '+(on?'on':'off')+' (restarted)');}};
+function seek(dir,hunt){if(!D)return;const f=$('seekFrom').value||(D.system.cc)||((D.systems[$('sysSel').value]||{}).ccs||[])[0]||'';
+  api('/api/cc/seek',{dir,hunt:!!hunt,from:f,band:$('seekBand').value||null,mode:$('seekMode').value}).then(r=>{if(r.ok){
+    toast(hunt?'hunting the whole band…':('seeking '+dir+' from '+(r.from?fmtMHz(r.from):'band edge')));setTab('seek');}});}
+$('huntBtn').onclick=()=>seek('up',true);
+const saveF=id=>api('/api/cc/save',{id}).then(r=>{if(r.ok){toast(r.msg);selTouched=false;poll();}});
+const discF=id=>api('/api/cc/discard',{id}).then(r=>{if(r.ok){toast('discarded');selTouched=false;poll();}});
+$('tempSave').onclick=()=>saveF(D.active); $('tempDisc').onclick=()=>discF(D.active);
+document.addEventListener('click',e=>{const b=e.target.closest('[data-hact]');if(!b)return;const id=b.dataset.id;
+  if(b.dataset.hact==='save')saveF(id); else if(b.dataset.hact==='disc')discF(id);
+  else api('/api/switch',{id,cc:b.dataset.f,cc_only:true}).then(r=>{if(r.ok){toast('listening (unsaved)');selTouched=false;poll();}});});
+$('seekUp').onclick=$('seekUp2').onclick=()=>seek('up'); $('seekDn').onclick=$('seekDn2').onclick=()=>seek('down');
+$('seekStop').onclick=()=>api('/api/scan/stop',{}).then(()=>toast('stopping seek…'));
+
+// ---- watch
+async function watch(rid,on){if(!/^\d+$/.test(String(rid)))return toast('enter a numeric radio ID');
+  await api('/api/watch',{rid:String(rid),on});poll();}
+$('ridAdd').onclick=()=>{watch($('ridIn').value.trim(),true);$('ridIn').value='';};
+$('ridIn').onkeydown=e=>{if(e.key==='Enter')$('ridAdd').click();};
+$('wsBtn').onclick=async()=>{const on=D&&D.wsess.on;const r=await api('/api/watchsess/'+(on?'stop':'start'),{});
+  if(r.msg)toast(r.msg);if(r.report)window.open('/api/report/'+encodeURIComponent(r.report),'_blank');poll();};
+document.addEventListener('click',e=>{const w=e.target.closest('[data-watch]');if(w)watch(w.dataset.watch,w.dataset.on==='1');
+  const c=e.target.closest('[data-wclear]');if(c)api('/api/watch/clear',{rid:c.dataset.wclear}).then(poll);});
+$('wcAll').onclick=()=>{if(confirm('Clear the kept history of every watched radio? (They stay on watch.)'))api('/api/watch/clear',{}).then(poll);};
+
+// ---- render
+const fmtMHz=f=>f?(parseFloat(f).toFixed(5)):'—';
+// OP25 text prints MHz with 4 or 6 decimals: show every frequency (3-digit MHz) with exactly 5
+const F5=t=>String(t??'').replace(/(^|[^\d.])([1-9]\d{2}\.\d+)(?![\d.])/g,(m,p,v)=>p+parseFloat(v).toFixed(5));
+function sysName(){return D&&D.active&&D.systems[D.active]?D.systems[D.active].name:'';}
+function kvs(rows){return '<div class="kv">'+rows.map(([k,v])=>`<div class="k">${k}</div><div class="v">${v}</div>`).join('')+'</div>';}
+function card(t,body){return `<div class="card"><h3>${t}</h3>${body}</div>`;}
+function rssiCol(v){return v==null?'':(v>=-35?'var(--ok)':v>=-55?'var(--warn)':'var(--bad)');}
+
+function renderHead(){
+  const s=D.system,c=D.counters,dg=D.diag;
+  const sel=$('sysSel');
+  if(!selTouched||!sel.options.length){const ids=Object.keys(D.systems).sort((a,b)=>D.systems[a].name.localeCompare(D.systems[b].name));
+    const h=ids.map(k=>`<option value="${E(k)}">${E(D.systems[k].name)}</option>`).join('');
+    if(sel.dataset.h!==h){sel.innerHTML=h;sel.dataset.h=h;}
+    if(D.active&&!selTouched)sel.value=D.active; fillCC(); if(!selTouched){const o=[...$('ccSel').options].find(o=>o.value&&D.pin&&Math.abs(parseFloat(o.value)-parseFloat(D.pin))<0.0005);$('ccSel').value=o?o.value:'';}}
+  $('ccOnly').classList.toggle('on',!!D.cc_only);
+  const tf=D.active&&D.systems[D.active]&&D.systems[D.active].temp?[...(D.hunt||[]),D.seek_result].find(f=>f&&f.id===D.active):null;
+  $('tempBar').style.display=tf?'flex':'none';
+  if(tf)$('tempTxt').innerHTML=`Listening to <b>NAC ${E(tf.nac)} · WACN ${E(tf.wacn)} · SysID ${E(tf.sysid)} · Site ${E(V(tf.rfss))}-${E(V(tf.site))}</b> at ${fmtMHz(tf.freq)} MHz`+
+    (tf.match?` <span class="small mut">(same WACN/SysID as “${E(tf.match)}”: Save adds this site)</span>`:' <span class="small mut">(not in your database)</span>');
+  const sb=$('seekBand');if(!sb.options.length)sb.innerHTML='<option value="">auto</option>'+Object.entries(D.bands).map(([k,v])=>`<option value="${k}">${E(v)}</option>`).join('');
+  updRun();
+  const p=$('stPill');
+  if(D.scan.running){p.textContent=(D.scan.seek.hunt?'HUNT ':'SEEK ')+F5(D.scan.seek.msg||'');p.style.color='var(--blue)';}
+  else if(!D.op25.running){p.textContent=D.op25.error?('stopped: '+D.op25.error):'stopped';p.style.color='var(--mut)';}
+  else if(D.tsbk_per_s>0){p.textContent='DECODING '+D.tsbk_per_s+'/s';p.style.color='var(--ok)';}
+  else {p.textContent='searching…';p.style.color='var(--warn)';}
+  const r=D.cc.rfss||{},n=D.cc.net||{};
+  const cells=[['NAC',V(s.nac)],['WACN',V(String(s.wacn||n.wacn||'').toUpperCase().replace('0X','0x'))],['SysID',V(s.sysid??r.sysid)],['RFSS',V(s.rfss??r.rfss)],['Site',V(s.site??r.site)],
+    ['Control ch',fmtMHz(s.cc)],['TSBK/s',V(D.tsbk_per_s)],
+    ['RSSI dBFS',dg.level_db==null?'—':`<span style="color:${rssiCol(dg.level_db)}">${dg.level_db.toFixed(1)}</span>`],
+    ['Freq err',dg.error_hz==null?'—':Math.round(dg.error_hz)+' Hz']];
+  $('ident').innerHTML=cells.map(([k,v])=>`<div><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+  $('n-adjacent').textContent=D.cc.adj.length||''; $('n-iden').textContent=D.cc.iden.length||''; $('n-msgs').textContent=D.cc.msgs.length||'';
+  $('n-watch').textContent=D.watch.length?(D.watch.length+(D.wsess.on?' ●':'')):'';
+  $('n-seek').textContent=D.scan.running?'…':'';
+}
+
+function renderSystem(){
+  const s=D.system,c=D.counters,cc=D.cc,r=cc.rfss||{},n=cc.net||{},dg=D.diag;
+  const tdma=cc.iden.some(i=>i.type==='TDMA')||Object.values(D.bandplan||{}).some(b=>b.type==='TDMA');
+  const sec=[...new Set([...(s.secondary_cc||[]).map(fmtMHz),...cc.sccb.map(x=>fmtMHz(x.freq))])];
+  const ident=kvs([['System',E(sysName())||'—'],['NAC',V(s.nac)],['WACN',V(s.wacn||n.wacn)],['System ID',V(s.sysid??r.sysid)],
+    ['RFSS / Site',V(s.rfss??r.rfss)+' / '+V(s.site??r.site)],['Control channel',s.cc?fmtMHz(s.cc)+' MHz':'—'],
+    ['Secondary CCs',sec.length?sec.join(', '):'none heard'],['Location reg. area (LRA)',V(n.lra)],
+    ['Network link (A)',r.net_active==null?'—':(r.net_active?'<span class="b g">ACTIVE</span>':'<span class="b r">SITE TRUNKING</span>')],
+    ['Voice',tdma?'<span class="b bl">Phase II TDMA</span>':(cc.iden.length?'Phase I FDMA':'—')],
+    ['Adjacent sites',cc.adj.length],['Encryption keys loaded',(D.keys_loaded||[]).join(', ')||'none']]);
+  const health=kvs([['Decode rate',D.tsbk_per_s==null?'—':D.tsbk_per_s+' TSBK/s'],['TSBKs decoded',V(c.tsbks,0)],
+    ['CC timeouts',V(c.cc_timeouts,0)],['Sync losses',V(c.sync_losses,0)],
+    ['RSSI (relative)',dg.level_db==null?'—':dg.level_db.toFixed(1)+' dBFS'],['Freq error',dg.error_hz==null?'—':Math.round(dg.error_hz)+' Hz'],
+    ['Device ppm',V(dg.ppm)],['Mode',D.cc_only?'CC-only (all CC data)':'following voice (TSBK/s dips during calls)'],
+    ['Watching since',cc.since?new Date(cc.since*1000).toLocaleTimeString():'—']]);
+  const sv=cc.srv||{},tm=cc.time||{},sy=cc.sync||{},pp=cc.pparm||{};
+  const svc=kvs([['Services available',V(sv.avail)],['Services supported',V(sv.supp)],['Request priority',V(sv.prio)],
+    ['UTC offset (min)',V(tm.utc_offset_min)],['CC time (UTC)',sy.time?E(sy.time.split(' ').pop().split('.')[0]):'—'],['LTO (min)',V(sy.lto_min)],['Protection algid',V(pp.algid)],
+    ['Packet data (SNDCP)',cc.sndcp?`<b>${cc.sndcp.chans.length?cc.sndcp.chans.join(', '):'not offered'}</b> <span class="small mut">${cc.sndcp.aa?'open':cc.sndcp.ra?'on request':''} · ${cc.sndcp.dso_txt} · DAC ${cc.sndcp.dac.toString(16).toUpperCase().padStart(4,'0')}${cc.sndcp.rsv_seen.some(x=>x)?' · reserved bits '+cc.sndcp.rsv_seen.map(x=>'0x'+x.toString(16)).join('/'):''} · version set per session, not broadcast</span>`:'—'],
+    ['Motorola site load',cc.mload?`<b>${cc.mload.level}</b> <span class="small mut">idle ${cc.mload.min} · peak ${cc.mload.max}</span>`:'—'],['Last RFSS status',V(r.last)],['Last network status',V(n.last)]]);
+  const traffic=kvs([['Grants',V(c.grants,0)],['Affiliations',V(c.affiliations,0)],['Registrations',V(c.registrations,0)],
+    ['Emergencies',c.emergencies?`<span class="b r">${c.emergencies}</span>`:0],['Encrypted grants',V(c.encrypted,0)],
+    ['Radios heard',D.radios.length],['Talkgroups heard',D.talkgroups.length],['Message types',cc.msgs.length]]);
+  $('sysGrid').innerHTML=card('Identity',ident)+card('Control channel health',health)+card('Services &amp; timing',svc)+card('Traffic',traffic);
+}
+
+function flagB(f){if(!f)return '<span class="mut">—</span>';
+  return (f.A?'<span class="b g">NET</span>':'<span class="b y">NO NET</span>')+(f.F?'<span class="b r">FAILSOFT</span>':'')+(f.C?'<span class="b bl">CONV</span>':'')+(f.V?'':'<span class="b">not valid</span>');}
+function knownAt(f){if(!f)return '';const x=parseFloat(f);
+  for(const [k,s] of Object.entries(D.systems))if((s.ccs||[]).some(c=>Math.abs(parseFloat(c)-x)<0.003))return s.name;return '';}
+function renderAdj(){const a=D.cc.adj;
+  $('adjBox').innerHTML=a.length?`<table><tr><th>SysID</th><th>RFSS</th><th>Site</th><th>Control ch MHz</th><th>Status</th><th>Heard</th><th>Last</th><th>In database</th></tr>`+
+    a.map(x=>`<tr><td>${E(V(x.sysid))}${x.wacn?'<div class="small mut">'+E(x.wacn)+'</div>':''}</td><td class="big" style="font-size:1.3rem">${V(x.rfss)}</td><td class="big" style="font-size:1.3rem">${V(x.site)}</td>
+      <td><b>${fmtMHz(x.freq)}</b></td><td>${flagB(x.flags)}</td><td>${x.count}&times;</td><td>${E(x.last)}</td><td class="small">${E(knownAt(x.freq))||'<span class="mut">new</span>'}</td></tr>`).join('')+'</table>'+
+    '<p class="small mut">Flags from adj_sts_bcst: NET = site has an active link to the RFSS controller; FAILSOFT = site failed; CONV = conventional; "not valid" = info not current.</p>'
+    :'<div class="empty">No adjacent-site broadcasts yet. They usually arrive every few seconds once the CC is decoding.</div>';}
+function renderIden(){const a=D.cc.iden;
+  $('idenBox').innerHTML=a.length?`<table><tr><th>ID</th><th>Type</th><th>Base MHz</th><th>Spacing kHz</th><th>TX offset MHz</th><th>BW kHz</th><th>Slots</th><th>Message</th><th>Last</th></tr>`+
+    a.map(x=>`<tr><td class="big" style="font-size:1.3rem">${x.id}</td><td>${x.type==='TDMA'?'<span class="b bl">TDMA</span>':'<span class="b">FDMA</span>'} ${E(x.band)}</td>
+      <td><b>${E(x.base)}</b></td><td>${x.spacing_khz}</td><td>${x.tx_offset_mhz>0?'+':''}${x.tx_offset_mhz}</td><td>${V(x.bw_khz)}</td><td>${V(x.slots)}</td>
+      <td class="small mut">${E(x.via)}</td><td>${E(x.last)}</td></tr>`).join('')+'</table>'+
+    '<p class="small mut">Channel number &rarr; frequency: base + spacing &times; (channel &divide; slots). Uplink = downlink + TX offset.</p>'
+    :'<div class="empty">No IDEN updates yet.</div>';}
+function renderMsgs(){const m=D.cc.msgs;names();
+  $('msgBox').innerHTML=m.length?`<table><tr><th>Message</th><th>Opcode</th><th>Count</th><th>First</th><th>Last</th><th>Last content</th></tr>`+
+    m.map(x=>{const d=decode(x.op,x.text,x.dec);return `<tr class="${d?'mh':''}"><td><b>${E(opNm(x.op))}</b></td><td class="mono">${E(x.op.split(' ')[0])}</td><td>${x.count}</td><td>${E(x.first)}</td><td>${E(x.last)}</td><td class="mono" style="max-width:34rem">${E(F5(x.text))}</td></tr>`+
+      (d?`<tr class="md"><td colspan="6">${E(F5(d))}</td></tr>`:'');}).join('')+'</table>'
+    :'<div class="empty">No control-channel messages yet.</div>';}
+const AF=[['all','All'],['grant','Grants'],['reg','Affil / Reg'],['fail','Denied / Failures'],['cmd','Commands / Alerts'],['crypt','Encryption'],['data','Data'],['watch','Watched only']];
+$('actFilt').innerHTML=AF.map(([k,t])=>`<button data-af="${k}">${t}</button>`).join('')+'<span class="sp"></span><button id="evAll" title="the CC repeats each grant ~1/s for the whole call; by default those repeats are merged into one row">Show every repeat</button>';
+$('actFilt').onclick=e=>{const b=e.target.closest('[data-af]');if(b){ACT=b.dataset.af;render();}
+  if(e.target.closest('#evAll')){EVALL=!EVALL;try{localStorage.setItem('cc_evall',EVALL?'1':'0');}catch(x){}poll();}};
+function evOk(e){switch(ACT){case 'grant':return e.kind==='GRANT';case 'reg':return /AFFIL|REG|DEREG/.test(e.kind)&&e.kind!=='REGFAIL';
+  case 'fail':return e.kind==='REGFAIL'||e.kind==='DENY'||e.kind==='QUEUED'||e.granted===false;case 'cmd':return /XFN|ALERT|STATUS|EMERG/.test(e.kind);case 'crypt':return e.kind==='CRYPT'||e.encrypted;case 'data':return e.kind==='DATA';
+  case 'watch':return !!e.watch;default:return true;}}
+const KB={GRANT:'g',AFFIL:'bl',REG:'bl',DEREG:'',REGFAIL:'r',CRYPT:'y',DATA:'o',DENY:'r',QUEUED:'y',XFN:'o',ALERT:'bl',EMERG:'r',STATUS:'bl'};
+function evRow(e){const rid=(e.rid?`<b>${e.rid}</b>${e.ridalias?' <span class="small mut">'+E(e.ridalias)+'</span>':''}`:'')+(e.src?` <span class="small mut">&harr; ${E(e.src)}</span>`:'');
+  const tg=e.tg!=null?`TG <b>${e.tg}</b>${e.tgtag?' <span class="small mut">'+E(e.tgtag)+'</span>':''}`:'';
+  const fl=(e.emergency?'<span class="b r">EMERG</span>':'')+(e.encrypted?'<span class="b y">ENC</span>':'')+(e.granted===false?'<span class="b r">DENIED</span>':'')+
+    (e.reason?'<span class="b r">'+E(e.reason)+'</span>':'')+(e.algid?'<span class="b y">'+E(e.algid)+' '+E(e.keyid||'')+'</span>':'')+(e.kind2?'<span class="small mut">'+E(e.kind2)+'</span> ':'')+(e.dtype?E(e.dtype):'');
+  const tm=e.n>1?`${E(e.first)}<span class="small"> → ${E(String(e.last).slice(-5))}</span>`:E(e.ts);
+  const rep=e.n>1?`<span class="b" title="${e.kind==='GRANT'?'grant + repeated grant updates for this call':'repeated by the control channel'}">×${e.n}</span> `:'';
+  return `<tr class="${e.watch?'w':''}"><td class="mut">${tm}</td><td><span class="b ${KB[e.kind]||''}">${E(e.kind)}</span></td><td>${rid}</td><td>${tg}</td><td>${e.freq?fmtMHz(e.freq):''}</td><td>${rep}${fl}</td></tr>`;}
+function renderAct(){document.querySelectorAll('#actFilt button[data-af]').forEach(b=>b.classList.toggle('on',b.dataset.af===ACT));$('evAll').classList.toggle('on',EVALL);
+  const ev=D.events.filter(evOk).slice(-120).reverse();
+  $('actBox').innerHTML=ev.length?'<table class="feed"><tr><th>Time</th><th>Event</th><th>Radio</th><th>Talkgroup</th><th>MHz</th><th>Detail</th></tr>'+ev.map(evRow).join('')+'</table>':'<div class="empty">No matching activity yet.</div>';}
+function renderWatch(){
+  const w=D.wsess;$('wsBtn').className=w.on?'stop':'';$('wsBtn').innerHTML=w.on?'&#9632; End watch &amp; make report':'&#9654; Start watch report';
+  $('wsInfo').textContent=w.on?('recording since '+w.start+' · '+w.events+' events'):(D.watch.length?'':'add radio IDs, then start a watch report');
+  $('watchBox').innerHTML=D.watch_diag.length?D.watch_diag.map(r=>{
+    const ev=(r.events||[]).slice(-8).reverse().map(e=>`<div class="small">${E(e.ts)} <span class="b ${KB[e.kind]||''}">${E(e.kind)}</span>${e.tg!=null?' TG '+e.tg+(e.tgtag?' '+E(e.tgtag):''):''}${e.granted===false?' <span class="b r">DENIED</span>':''}${e.reason?' '+E(e.reason):''}</div>`).join('');
+    return `<div class="card"><div class="row" style="margin:0"><span class="big" style="font-size:1.6rem">${r.rid}</span><span class="mut">${E(r.alias)}</span><span class="sp"></span><button data-wclear="${r.rid}">clear</button><button data-watch="${r.rid}" data-on="0">remove</button></div>`+
+      kvs([['Last seen',V(r.last)+(r.last_action?' · '+E(r.last_action):'')],['Talkgroup',r.tg!=null?r.tg+(r.tgtag?' '+E(r.tgtag):''):'—'],
+        ['Site (RFSS-Site)',r.site!=null?V(r.rfss)+'-'+r.site:'—'],['Uplink RF / BER',r.rf!=null?r.rf+' / '+r.ber:'—'],['Worst RF / BER',r.rf_min!=null?r.rf_min+' / '+r.ber_max:'—'],
+        ['Reg failures',r.reg_fails?`<span class="b r">${r.reg_fails}</span> ${E(r.last_reg_fail||'')}`:'0'],['CC events',r.count]])+
+      (ev?'<div style="margin-top:.35rem;border-top:1px solid var(--line);padding-top:.3rem">'+ev+'</div>':'')+'</div>';}).join(''):'<div class="empty">No radios on watch.</div>';
+  $('repBox').innerHTML=D.reports.length?D.reports.map(r=>`<div><a href="/api/report/${encodeURIComponent(r.name)}" target="_blank">${E(r.name)}</a> <span class="mut">${r.kb} kB</span></div>`).join(''):'<span class="mut">No watch reports yet. Reports are saved in ~/lg-reports.</span>';
+  const ws=new Set(D.watch.map(String));
+  $('radBox').innerHTML=D.radios.length?'<table><tr><th></th><th>Radio</th><th>Last</th><th>Action</th><th>TG</th><th>Site</th><th>RF/BER</th><th>Voice err</th></tr>'+
+    D.radios.slice(0,60).map(r=>`<tr class="${ws.has(String(r.rid))?'w':''}"><td><button data-watch="${r.rid}" data-on="${ws.has(String(r.rid))?0:1}">${ws.has(String(r.rid))?'&#9733;':'&#9734;'}</button></td>
+      <td><b>${r.rid}</b> <span class="small mut">${E(r.alias)}</span></td><td>${E(V(r.last))}</td><td>${E(V(r.last_action))}</td><td>${r.last_tg!=null?r.last_tg+' <span class="small mut">'+E(r.tgtag)+'</span>':'—'}</td>
+      <td>${r.site!=null?V(r.rfss)+'-'+r.site:'—'}</td><td>${r.rf!=null?r.rf+' / '+r.ber:'—'}</td><td>${r.voice_err!=null?r.voice_err.toFixed(3):'—'}</td></tr>`).join('')+'</table>':'<div class="empty">No radios heard yet.</div>';}
+function findRow(f,live){const st=f.saved?'<span class="b g">SAVED</span> <span class="small mut">'+E(f.saved_as||'')+'</span>':f.discarded?'<span class="b">discarded</span>':
+    (live?'<span class="b o">LISTENING</span> ':'')+`<button data-hact="listen" data-id="${f.id}" data-f="${f.freq}">&#127911; Listen</button> <button class="pri" data-hact="save" data-id="${f.id}">&#128190; Save</button> <button data-hact="disc" data-id="${f.id}">&times;</button>`;
+  return `<tr class="${live?'w':''}"><td class="mut">${E(f.time)}</td><td><b>${fmtMHz(f.freq)}</b>${f.power_db!=null?'<div class="small mut">'+f.power_db+' dB</div>':''}</td>
+    <td><b>${E(f.nac)}</b></td><td>${E(String(f.wacn||'').toUpperCase().replace('0X','0x'))}</td><td><b>${E(f.sysid)}</b></td><td>${E(V(f.rfss))}-${E(V(f.site))}</td>
+    <td>${f.phase2?'<span class="b bl">P2</span>':'P1'}</td><td class="small">${(f.adjacent||[]).length} adj</td>
+    <td class="small">${f.match?E(f.match):'<span class="b o">NEW</span>'}</td><td>${st}</td></tr>`;}
+function renderSeek(){const sc=D.scan,sk=sc.seek||{},r=D.seek_result,h=D.hunt||[];
+  $('seekStop').disabled=!sc.running; ['seekUp2','seekDn2','seekUp','seekDn','huntBtn'].forEach(i=>$(i).disabled=sc.running);
+  if(!$('seekFrom').value&&document.activeElement!==$('seekFrom'))$('seekFrom').placeholder=D.system.cc?fmtMHz(D.system.cc):'MHz';
+  $('seekStat').innerHTML=(sk.dir||sc.running)?kvs([['State',sc.running?'<span class="b bl">'+(sk.hunt?'HUNTING':'SEEKING')+'</span>':E(sc.phase)],
+      ['Mode',(sk.hunt?'hunt whole band':'seek '+E(V(sk.dir)))+' · '+(sk.mode==='site'?'every site':'systems')],['Band',E(V(D.bands[sk.band]||sk.band))],
+      ['Started from',sk.start?fmtMHz(sk.start)+' MHz':'band edge'],['Surveying around',sk.center?Number(sk.center).toFixed(5)+' MHz':'—'],
+      ['Probing',sk.freq?fmtMHz(sk.freq)+' MHz':'—'],['Carriers probed / repeats skipped',V(sk.probed,0)+' / '+V(sk.skipped,0)],['Status',E(F5(sk.msg))+(sc.error?' '+E(sc.error):'')]])
+    :'<div class="mut"><b>Seek &#9664;&#9664; / &#9654;&#9654;</b> stops on the next P25 system and listens to it. <b>Hunt band</b> sweeps the whole band and lists every system it hears. '+
+     'Finds are <b>not saved</b> until you press Save (it merges into a saved system with the same WACN/SysID). "every site" also stops on other sites of the same system. Each carrier takes up to ~8 s to probe.</div>';
+  const fs=[...h]; if(r&&!fs.some(f=>f.id===r.id))fs.unshift(r);
+  $('seekRes').innerHTML=fs.length?'<div class="card"><h3>Systems found ('+fs.length+')</h3><table><tr><th>Time</th><th>CC MHz</th><th>NAC</th><th>WACN</th><th>SysID</th><th>Site</th><th>Phase</th><th></th><th>In database</th><th></th></tr>'+
+    fs.map(f=>findRow(f,f.id===D.active)).join('')+'</table></div>':'';}
+let RAWC=null;
+$('rawPause').onclick=()=>{RAWP=!RAWP;$('rawPause').classList.toggle('on',RAWP);$('rawPause').innerHTML=RAWP?'&#9654; Resume':'&#10074;&#10074; Pause';render();};
+$('rawFilt').oninput=()=>render();
+function renderRaw(){if(!RAWP||!RAWC)RAWC=D.firehose;const f=$('rawFilt').value.trim().toLowerCase();names();
+  const rows=RAWC.filter(x=>!f||(x.op+' '+x.text).toLowerCase().includes(f)).slice(-150).reverse();
+  $('rawBox').innerHTML=rows.length?'<table class="mono"><tr><th>Time</th><th>Message</th><th>Content</th></tr>'+rows.map(x=>`<tr><td class="mut">${E(x.ts)}</td><td><b>${E(x.op)}</b><div class="small mut">${E(opNm(x.op))}</div></td><td>${E(F5(x.text))}${(d=>d?'<div class="dec">'+E(F5(d))+'</div>':'')(decode(x.op,x.text,x.dec))}</td></tr>`).join('')+'</table>':'<div class="empty">Nothing yet.</div>';}
+
+// ---- Diagnostics ("Expert"): every health signal we have, turned into plain-English findings
+let CH=[], DGF='all';                          // counter history (10 min) for "in the last 5 min" deltas
+function hist(){const t=Date.now();CH.push({t,c:{...D.counters},x:{...((D.xlog||{}).counts||{})}});while(CH.length&&t-CH[0].t>600000)CH.shift();}
+function dlt(src,k,sec){const o=CH.find(h=>h.t>=Date.now()-sec*1000)||CH[0];if(!o)return 0;const now=src==='c'?D.counters:((D.xlog||{}).counts||{});return Math.max(0,(now[k]||0)-(o[src][k]||0));}
+const ago=s=>{s=Math.round(s);return s<90?s+' s':s<5400?Math.round(s/60)+' min':(s/3600).toFixed(1)+' h';};
+const SEVO={crit:0,warn:1,info:2,ok:3}, SICON={crit:'🔴',warn:'🟡',ok:'🟢',info:'🔵'};
+const AREAS=['Receiver','Control channel','System & site','Radios & calls','uConsole'];
+function expert(){const F=[],A=(s,a,t,d,fx)=>F.push({s,a,t,d:d||'',fx:fx||''});
+  const h=D.host||{},x=(D.xlog||{}).counts||{},xl=(D.xlog||{}).last||{},c=D.counters||{},dg=D.diag||{},s=D.system||{},cc=D.cc||{},r=cc.rfss||{},n=cc.net||{};
+  const run=D.op25.running&&!D.scan.running, up=h.op25_since&&h.clock?h.clock-h.op25_since:0, rt=D.tsbk_per_s;
+  // receiver
+  if(D.scan.running)A('info','Receiver','Seek / hunt in progress','The decoder is paused while the System Hunter probes carriers.');
+  else if(!D.op25.running)A(D.op25.error?'crit':'info','Receiver',D.op25.error?'Decoder stopped with an error':'Decoder is stopped',D.op25.error?String(D.op25.error):'Nothing is being received.','Pick a system and press Run.');
+  else if(h.op25_alive===false)A('crit','Receiver','OP25 has quit',`The decoder process exited (code ${V(h.op25_exit)}), so nothing is being decoded.`,'Press Stop, then Run. If it keeps quitting, read the receiver event log below.');
+  else A('ok','Receiver','Decoder running',`OP25 has been running for ${ago(up)}${h.op25_cpu!=null?', using '+h.op25_cpu+'% of one CPU core':''}.`);
+  if(h.sdr_usb===false)A('crit','Receiver','RTL-SDR not on USB','The SDR (0bda:2838) is unplugged or unpowered, so nothing can be received.','Power the SDR rail (sudo pinctrl set 7 op dh), then press Run.');
+  else if(h.sdr_usb)A('ok','Receiver','RTL-SDR present on USB');
+  if(run&&up>8){const lv=dg.level_db,e=dg.error_hz;
+    if(lv!=null)A(lv>-8?'warn':lv>=-35?'ok':lv>=-55?'warn':'crit','Receiver',lv>-8?'Signal very strong: overload risk':lv>=-35?'Signal level good':lv>=-55?'Signal level weak':'Signal level very weak',
+      `Channel level ${lv.toFixed(1)} dBFS (relative, at fixed gain; not dBm).`+(lv>-8?' The 8-bit RTL can clip on a signal this hot, which garbles decoding.':''),
+      lv>-8?'Lower the gain or move away from the tower.':lv<-35?'Use a better antenna, get higher or outside, or move closer to the site.':'');
+    if(e!=null){const a=Math.abs(e);A(a>1500?'crit':a>500?'warn':'ok','Receiver',a>500?'Receiver is off frequency':'Receiver on frequency',
+      `Frequency error ${Math.round(e)} Hz, about ${(a/(parseFloat(s.cc)||850)).toFixed(2)} ppm at ${fmtMHz(s.cc)} MHz (device ppm setting ${V(dg.ppm)}).`,
+      a>500?'Run auto-calibrate in Looking Glass on a strong CC and save the ppm in /etc/default/sdr-looking-glass.':'');}}
+  if(x.overflow)A('crit','Receiver','Samples dropped (CPU overload)',`${x.overflow} overflow(s), last at ${V(xl.overflow)}: the CPU fell behind the SDR and data was lost.`,'Close other apps and check the CPU load under uConsole.');
+  if(x.usb)A('crit','Receiver','SDR USB error',`${x.usb} USB/SDR error(s), last at ${V(xl.usb)}.`,'Replug or re-power the SDR, then press Run.');
+  if(x.sw_err)A('crit','Receiver','OP25 software error',`${x.sw_err} error line(s) in the OP25 output, last at ${V(xl.sw_err)}. See the event log below.`);
+  // control channel
+  if(run&&up>8){
+    if(rt==null)A('info','Control channel','Measuring decode rate…');
+    else if(rt===0)A(D.cc_only?'crit':'info','Control channel',D.cc_only?'Not decoding the control channel':'No CC data right now (probably following a call)',D.cc_only?`Zero messages per second: nothing usable is being heard on ${fmtMHz(s.cc)} MHz.`:'Zero messages right now. CC-only is off, so the receiver may just be away following a voice call.',
+      'Check the antenna and the selected system/CC; try another CC from the CC menu, or use Seek.');
+    else A(!D.cc_only&&rt<20?'info':rt>=20?'ok':rt>=5?'warn':'crit','Control channel',rt>=20?'Control channel decoding cleanly':rt>=5?'Control channel decode is marginal':'Control channel decode is poor',
+      `${rt} messages per second (a clean P25 control channel gives about 30-40/s${D.cc_only?'':'; with CC-only off it dips during calls'}).`,rt<20&&D.cc_only?'Weak or noisy signal: improve the antenna or position.':'');}
+  const to5=dlt('c','cc_timeouts',300),sl5=dlt('c','sync_losses',300),nid5=dlt('x','nid_err',300);
+  if(c.cc_timeouts)A(to5>=3?'crit':to5?'warn':'info','Control channel',`Control channel lost ${to5}× in the last 5 min`,`${c.cc_timeouts} total since start, last at ${V(xl.cc_timeout)}. Each time OP25 went several seconds without CC data and hunted the next CC in the list.`,
+    to5?'The signal is fading out (edge of coverage), or the site moved its CC: check the secondary CCs.':'');
+  else if(run&&up>30)A('ok','Control channel','No control-channel dropouts');
+  if(c.sync_losses)A(sl5>=5?'warn':'info','Control channel',`Frame sync lost ${sl5}× in the last 5 min`,`${c.sync_losses} total. The demodulator briefly stopped recognising P25 frames (fade, multipath or interference).`);
+  if(x.nid_err)A(nid5>20?'warn':'info','Control channel',nid5?`${nid5} corrupt frame(s) in the last 5 min`:`${x.nid_err} corrupt frame(s) since start`,`${x.nid_err} total frames thrown away because their header (NID) failed its error check: bit errors on the air.`,nid5>20?'Signal quality is poor (weak or multipath).':'');
+  if(x.no_rx)A('info','Control channel','CC left unattended during calls',`${x.no_rx} time(s) the only receiver was following voice, so CC messages were missed.`,'Turn on CC-only to capture every CC message.');
+  if(run&&!D.cc_only)A('info','Control channel','CC-only is off','The receiver leaves the control channel to follow voice calls, so some CC messages are missed.','Turn on CC-only for complete CC logging.');
+  if(x.rs_errs)A('info','Control channel',`${x.rs_errs} TDMA burst(s) needed error correction`,'Reed-Solomon fixed bit errors in Phase II bursts: decoded fine, but the signal is not perfect.');
+  // system & site
+  const hs=s.sysid??r.sysid,hw=s.wacn||n.wacn,sel=D.systems[D.active]||{};
+  if(s.nac||hs){A('info','System & site','Hearing',`NAC ${V(s.nac)} · WACN ${UP(hw)} · System ID ${V(hs)} · RFSS ${V(s.rfss??r.rfss)} · Site ${V(s.site??r.site)} on ${fmtMHz(s.cc)} MHz.`);
+    if(sel.sysid&&hs&&HX(sel.sysid)!==HX(hs))A('warn','System & site','Different system than selected',`“${sel.name}” is System ID ${sel.sysid}, but this CC belongs to System ID ${hs}.`,'This CC may belong to a neighbouring system: pick the right CC or use Seek.');
+    if(sel.wacn&&hw&&HX(sel.wacn)!==HX(hw))A('warn','System & site','Different WACN than selected',`“${sel.name}” is WACN ${UP(sel.wacn)}, but this CC says WACN ${UP(hw)}.`);}
+  if(r.net_active===false)A('crit','System & site','SITE TRUNKING: site is isolated',`RFSS ${V(r.rfss)} Site ${V(r.site)} lost its link to the system controller (A flag = 0). Only radios on this site can talk to each other; wide-area talkgroups, other sites and dispatch may be unreachable.`,'Nothing to fix on your side: this is the system. Watch for it to clear.');
+  else if(r.net_active)A('ok','System & site','Site linked to the network',`RFSS ${r.rfss} Site ${r.site} reports an active controller link (A flag = 1), so wide-area calls work.`);
+  const adj=cc.adj||[];
+  adj.forEach(a=>{const f=a.flags||{},nm=`RFSS ${V(a.rfss)} Site ${V(a.site)} (${fmtMHz(a.freq)} MHz)`;
+    if(f.F)A('crit','System & site','Neighbour site in FAILSOFT',`${nm} reports failsoft: its trunking has failed and radios there fall back to fixed channels.`);
+    else if(a.flags&&!f.A)A('warn','System & site','Neighbour site isolated',`${nm} reports no network link (site trunking): calls there stay local.`);
+    if(f.C)A('info','System & site','Neighbour is conventional',`${nm} is a conventional (non-trunked) site.`);});
+  if(adj.length&&!adj.some(a=>a.flags&&(a.flags.F||!a.flags.A)))A('ok','System & site',`${adj.length} neighbour site(s), all linked`,adj.map(a=>V(a.rfss)+'-'+V(a.site)+' @ '+fmtMHz(a.freq)).join(', '));
+  else if(!adj.length&&run&&up>60)A('info','System & site','No neighbour sites broadcast','No adjacent-site messages yet: a single-site system, or this site sends no neighbour list.');
+  const sec=[...new Set([...(s.secondary_cc||[]),...(cc.sccb||[]).map(z=>z.freq)].map(fmtMHz))];
+  if(sec.length)A('info','System & site',`${sec.length} secondary control channel(s)`,sec.join(', ')+' MHz: the site can move its CC to these.');
+  if((cc.iden||[]).some(i=>i.type==='TDMA'))A('info','System & site','Phase II TDMA voice','Voice calls use 2-slot TDMA: a Phase II capable radio or scanner is needed to hear them.');
+  else if((cc.iden||[]).length)A('info','System & site','Phase I FDMA voice','Voice calls use one frequency per call (Phase I).');
+  const ml=cc.mload;if(ml){const busy=ml.level-ml.min;
+    A(busy>=6?'warn':'info','System & site',`Motorola site load: level ${ml.level}`,`Vendor message 0x09 (meaning not published; SDRTrunk suspects site/channel loading). Here it idles at ${ml.min}, has peaked at ${ml.max}, and rises while calls are being set up.`+(busy>=6?' The site is much busier than its idle level right now.':''));}
+  const sd=cc.sndcp;if(sd){A('info','System & site',`Packet data: ${sd.chans.length?sd.chans.length+' data channel(s)':'not offered'}`,`SNDCP data channel announcement (0x16): ${sd.down==='none'?'no data channel':'data on '+sd.down+(sd.up?', uplink '+sd.up:'')}; access ${sd.aa?'open (autonomous)':sd.ra?'on request':'flags off'}; ${sd.dso_txt}; data access code ${sd.dac.toString(16).toUpperCase().padStart(4,'0')}${sd.chans.length>1?'. The site rotates its announcement through '+sd.chans.join(', '):''}. The SNDCP version is agreed per data session on the data channel, not broadcast on the CC.`);
+    if(sd.rsv_seen.some(x=>x))A('warn','System & site','SNDCP reserved bits in use',`The data-channel announcement's 6 reserved bits have carried ${sd.rsv_seen.map(x=>'0x'+x.toString(16).toUpperCase()).join(', ')} (normally 0). Something undocumented is being sent there.`);}
+  if(cc.shutdown)A('crit','System & site','Planned control-channel shutdown announced',`At ${cc.shutdown} the site announced it is taking this control channel down (Motorola 0x0E). Radios will move to another CC.`,'Expect a CC timeout; OP25 will hunt the next CC, or use Seek / pick a secondary CC.');
+  const qd=(D.events||[]).filter(e=>e.kind==='QUEUED');
+  if(qd.length)A('warn','System & site',`System busy: ${qd.length} queued request(s)`,`Last at ${qd[qd.length-1].ts}: ${qd[qd.length-1].reason}. Radios had to wait for a channel.`,'The site is at capacity (all voice channels in use).');
+  (D.events||[]).filter(e=>e.kind==='XFN'&&/INHIBIT|MONITOR/.test(e.kind2||'')).slice(-5).forEach(e=>A(/UN-INHIBIT/.test(e.kind2)?'warn':'crit','Radios & calls',`Radio ${V(e.rid)}: ${e.kind2}`,`${e.ts}: the system sent a remote command to this radio${e.src?' (from '+e.src+')':''}.`));
+  const unh=(cc.msgs||[]).filter(m=>/unhandled$/.test(m.op));
+  if(unh.length)A('info','System & site',`${unh.length} message type(s) OP25 doesn't decode`,unh.map(m=>m.op.split(' ')[0]+(m.dec?' (decoded here)':'')).join(', ')+'. Decoded here from SDRTrunk layouts where possible; see the CC messages tab.');
+  // radios & calls
+  const ev=D.events||[];
+  ev.filter(e=>e.emergency).slice(-5).forEach(e=>A('crit','Radios & calls','EMERGENCY',`${e.ts}: emergency on TG ${V(e.tg)}${e.tgtag?' “'+e.tgtag+'”':''} from radio ${V(e.rid)}${e.ridalias?' “'+e.ridalias+'”':''}.`));
+  if(c.emergencies&&!ev.some(e=>e.emergency))A('crit','Radios & calls',`${c.emergencies} emergency call(s) since start`,'Older than the recent event list; see the Activity tab.');
+  const fails={};ev.filter(e=>e.kind==='REGFAIL'||e.granted===false).forEach(e=>(fails[e.rid]=fails[e.rid]||[]).push(e));
+  Object.entries(fails).sort((a,b)=>b[1].length-a[1].length).slice(0,8).forEach(([rid,l])=>{const e=l[l.length-1];
+    A('warn','Radios & calls',`Radio ${rid}${RIDN[rid]?' “'+RIDN[rid]+'”':''} rejected ${l.length}×`,`Last at ${e.ts}: ${e.kind2||e.kind} ${e.reason||'denied'}${e.tg!=null?' on TG '+e.tg:''}. ${e.kind==='DENY'?"The system refused this radio's request.":"The system refused this radio's join/registration: usually not allowed on that talkgroup or site, or the ID isn't in the system database."}`,
+      "Check the radio's programming (system/WACN, talkgroup list) against what this site allows.");});
+  if(c.grants)A('info','Radios & calls',`${c.grants} voice grants`,`${c.encrypted||0} encrypted (${Math.round(100*(c.encrypted||0)/c.grants)}%), ${c.affiliations||0} affiliations, ${c.registrations||0} registrations; ${(D.radios||[]).length} radios and ${(D.talkgroups||[]).length} talkgroups heard.`);
+  const enc=(D.talkgroups||[]).filter(t=>t.encrypted);
+  if(enc.length)A('info','Radios & calls',`${enc.length} encrypted talkgroup(s)`,enc.slice(0,12).map(t=>t.tgid+(t.tag?' '+t.tag:'')+' ('+V(t.algid)+(t.keyid?' key '+t.keyid:'')+')').join(', ')+'.');
+  if((D.keys_loaded||[]).length)A('ok','Radios & calls','Encryption keys loaded',(D.keys_loaded||[]).join(', '));
+  (D.radios||[]).filter(q=>q.ber_max!=null&&q.ber_max>=6).slice(0,8).forEach(q=>A('warn','Radios & calls',`Radio ${q.rid}: poor uplink`,`The site heard it with bit errors up to ${q.ber_max}/15 (weakest RF ${V(q.rf_min)}/15) over ${q.sq_count} reports: a weak signal into the tower (antenna, battery, or location).`));
+  (D.radios||[]).filter(q=>q.voice_err_max!=null&&q.voice_err_max>0.05).slice(0,6).forEach(q=>A('info','Radios & calls',`Radio ${q.rid}: noisy voice`,`We decoded its calls with up to ${(q.voice_err_max*100).toFixed(1)}% voice errors (that is our reception, not necessarily the radio).`));
+  (D.watch_diag||[]).forEach(w=>A('info','Radios & calls',`Watching radio ${w.rid}${w.alias?' “'+w.alias+'”':''}`,w.last?`Last seen ${w.last}${w.last_action?' ('+w.last_action+')':''}${w.tg!=null?' on TG '+w.tg:''}${w.site!=null?' at site '+V(w.rfss)+'-'+w.site:''}; ${w.count} CC events${w.reg_fails?', '+w.reg_fails+' rejected':''}.`:'Not heard yet.'));
+  // uConsole
+  if(h.temp_c!=null)A(h.temp_c>=80?'crit':h.temp_c>=70?'warn':'ok','uConsole',`CPU ${h.temp_c} °C`,h.temp_c>=80?'Hot enough to throttle the CPU, which can drop samples.':h.temp_c>=70?'Warm; the CPU throttles at 80-85 °C.':'Temperature normal.',h.temp_c>=70?'Get it out of the sun and give it airflow.':'');
+  const th=h.throttled;if(th!=null){const L=[];
+    if(th&1)L.push(['crit','Under-voltage right now','The battery/supply is too low: expect crashes, SD-card corruption and SDR dropouts.','Charge or swap the 18650 cells, or plug in USB-C power.']);
+    if(th&4)L.push(['crit','CPU throttled right now','The CPU is being slowed (heat or low voltage), so decoding may drop samples.']);
+    if(th&2)L.push(['warn','CPU frequency capped','The firmware has capped the ARM clock.']);
+    if(th&8)L.push(['warn','Soft temperature limit active','The CPU is near its temperature limit.']);
+    if(!(th&1)&&th&0x10000)L.push(['warn','Under-voltage happened since boot','The supply dipped too low at some point (low battery, or a current spike from the SDR/LoRa).','Check the batteries.']);
+    if(!(th&4)&&th&0x40000)L.push(['warn','CPU was throttled since boot','Throttling happened earlier (heat or voltage).']);
+    if(!L.length)A('ok','uConsole','Power and throttling OK','No under-voltage or throttling since boot.');L.forEach(z=>A(z[0],'uConsole',z[1],z[2],z[3]));}
+  if(h.load){const nc=h.cpus||4,l=h.load[0];A(l>nc?'crit':l>nc*.75?'warn':'ok','uConsole',`CPU load ${h.load.join(' / ')}`,`1 / 5 / 15-minute load average on ${nc} cores.`+(l>nc*.75?' The decoder may not keep up.':''),l>nc*.75?'Close other apps.':'');}
+  if(h.mem_avail_mb!=null)A(h.mem_avail_mb<250?'crit':h.mem_avail_mb<500?'warn':'ok','uConsole',`${h.mem_avail_mb} MB memory free`,`of ${h.mem_total_mb} MB.`,h.mem_avail_mb<500?'Close browser windows you are not using.':'');
+  if(h.disk_free_gb!=null)A(h.disk_free_gb<0.5?'crit':h.disk_free_gb<2?'warn':'ok','uConsole',`${h.disk_free_gb} GB disk free`,'Watch reports, surveys and logs are saved here.',h.disk_free_gb<2?'Copy old reports off ~/lg-reports and ~/lg-survey.':'');
+  const g=h.gps||{};
+  if(g.gpsd===false)A('warn','uConsole','GPS not answering','No reading from gpsd: survey points and watch reports will have no position.','Check the GPS rail (GPIO 27) and that gpsd is running.');
+  else if(g.fix==='none')A('warn','uConsole','No GPS fix',`${V(g.sats,0)} satellites seen, ${V(g.used,0)} used. Positions are missing until it gets a fix.`,'Give it a clear view of the sky (the first fix can take a few minutes).');
+  else if(g.fix)A('ok','uConsole',`GPS ${g.fix} fix`,`${V(g.used)} of ${V(g.sats)} satellites used${g.lat!=null?' · '+g.lat.toFixed(5)+', '+g.lon.toFixed(5):''}.`);
+  const sy=cc.sync||{},m=String(sy.time||'').match(/(\d+):(\d+):(\d+)/);
+  if(m&&h.clock){const df=((Math.floor(h.clock)%86400-(m[1]*3600+m[2]*60+ +m[3]))%86400+86400+43200)%86400-43200,ad=Math.abs(df);
+    A(ad>120?'warn':'ok','uConsole',ad>120?'uConsole clock is wrong':'uConsole clock matches the system',`The system's own clock (TDMA sync) says ${m[0]} UTC; the uConsole is ${ad>3?ago(ad)+(df>0?' ahead':' behind'):'in step'}.`,
+      ad>120?'Report and log times will be off by that much: there is no RTC and NTP is unreachable in the field.':'');}
+  if(h.ntp_synced===false&&!h.rtc)A(m?'info':'warn','uConsole','Clock not synchronised','No network time and no real-time clock, so the uConsole time can be wrong (reports and logs use it).','Connect to the internet briefly, or compare with the system clock above.');
+  else if(h.ntp_synced)A('ok','uConsole','Clock synchronised (NTP)');
+  if(h.uptime_s)A('info','uConsole',`Up ${ago(h.uptime_s)}`,'Time since the uConsole booted.');
+  return F;}
+function renderDiag(){names();const F=expert(),N={crit:0,warn:0,ok:0,info:0};F.forEach(f=>N[f.s]++);
+  $('dgSum').innerHTML=[['crit','critical'],['warn','warning'],['ok','OK'],['info','info']].map(([k,t])=>`<span class="chip ${k}">${SICON[k]} ${N[k]} ${t}</span>`).join('')+
+    '<span class="sp"></span>'+[['all','Everything'],['prob','Problems only']].map(([k,t])=>`<button data-dgf="${k}" class="${DGF===k?'on':''}">${t}</button>`).join('');
+  const show=F.filter(f=>DGF==='all'||f.s==='crit'||f.s==='warn').sort((a,b)=>SEVO[a.s]-SEVO[b.s]);
+  const fd=f=>`<div class="fd ${f.s}"><div class="ft">${SICON[f.s]} ${E(F5(f.t))}</div>${f.d?'<div class="fdd">'+E(F5(f.d))+'</div>':''}${f.fx?'<div class="ffx">What to do: '+E(f.fx)+'</div>':''}</div>`;
+  let o=AREAS.map(a=>{const l=show.filter(f=>f.a===a);return l.length?card(a,l.map(fd).join('')):'';}).join('');
+  if(!show.length)o='<div class="empty">🟢 No problems detected.</div>';
+  if(DGF==='all'){const xg=D.xlog||{},R=xg.rules||{},rec=(xg.recent||[]).slice().reverse().slice(0,60);
+    o+=card('Receiver event log (OP25)',rec.length?'<table class="feed"><tr><th>Time</th><th>What happened</th></tr>'+rec.map(e=>`<tr><td class="mut">${E(e.ts)}</td><td>${SICON[e.sev]||''} ${E((R[e.key]||[])[1]||e.key)}<div class="small mut mono">${E(F5(e.text))}</div></td></tr>`).join('')+'</table>':'<div class="mut">No receiver events since the last start.</div>');
+    const cn=Object.entries(D.counters||{}).map(([k,v])=>[E(k.replace(/_/g,' ')),v]).concat(Object.entries(xg.counts||{}).map(([k,v])=>[E((R[k]||[])[1]||k).split(':')[0],v+(xg.last&&xg.last[k]?' <span class="small mut">last '+E(xg.last[k])+'</span>':'')]));
+    o+=card('Every counter (since the last start)',kvs(cn));
+    const op=Object.entries(D.opcodes||{});
+    o+=card('Message types heard',op.length?'<table><tr><th>Message</th><th>Opcode</th><th>Count</th></tr>'+op.map(([k,v])=>`<tr><td>${E(opNm(k))}</td><td class="mono">${E(k)}</td><td>${v}</td></tr>`).join('')+'</table>':'<div class="mut">None yet.</div>');}
+  $('dgBox').innerHTML=o;}
+$('dgSum').onclick=e=>{const b=e.target.closest('[data-dgf]');if(b){DGF=b.dataset.dgf;render();}};
+function diagBadge(){if(!D)return;names();const F=expert(),cr=F.filter(f=>f.s==='crit').length,wn=F.filter(f=>f.s==='warn').length,el=$('n-diag');
+  el.textContent=cr?'🔴'+cr:wn?'🟡'+wn:''; el.style.color=cr?'var(--bad)':'var(--warn)';}
+
+function render(){if(!D)return;renderHead();diagBadge();
+  ({system:renderSystem,adjacent:renderAdj,iden:renderIden,msgs:renderMsgs,diag:renderDiag,activity:renderAct,watch:renderWatch,seek:renderSeek,raw:renderRaw}[TAB]||renderSystem)();}
+let busy=false;
+async function poll(){if(busy)return;busy=true;try{const r=await fetch('/api/cc'+(EVALL?'?all=1':''));if(r.ok){D=await r.json();hist();render();}}catch(e){$('stPill').textContent='backend offline';$('stPill').style.color='var(--bad)';}finally{busy=false;}}
+setTab(TABS.some(t=>t[0]===TAB)?TAB:'system'); poll(); setInterval(poll,1000);
+</script>
+</body></html>

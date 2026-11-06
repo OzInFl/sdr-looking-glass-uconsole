@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+# live database + per-machine state: never in the repo
+dashboard/lookingglass.db*
+dashboard/last_spectrum_map.json
+dashboard/systems.json
+dashboard/tags.json
+dashboard/rids.json
+*.bak
+*.log

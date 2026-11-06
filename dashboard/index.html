@@ -1,0 +1,1466 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SDR Looking Glass</title>
+<style>
+  :root{--bg:#0a0e14;--bg2:#0d1320;--panel:#121826;--panel2:#0f1521;--line:#232c3d;--fg:#dbe3ef;--mut:#7d8aa0;
+        --acc:#38bdf8;--grant:#58a6ff;--emerg:#ff4d4f;--enc:#f0b429;--aff:#36d399;--reg:#b794f6;--watch:#ff7b72;}
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 70% -10%,#13203a 0%,var(--bg) 55%);color:var(--fg);
+       font:13px/1.45 system-ui,Segoe UI,Roboto,sans-serif}
+  .mono{font-family:ui-monospace,Consolas,monospace}
+  a{color:var(--acc)}
+  select,input,button,textarea{background:#0b111c;border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:5px 9px;font:inherit;outline:none}
+  select:focus,input:focus,textarea:focus{border-color:var(--acc)}
+  button{cursor:pointer;transition:.12s}
+  button:hover{border-color:var(--acc)}
+  button.go{background:linear-gradient(180deg,#2ea043,#238636);border-color:#2ea043;color:#fff}
+  button.warn{background:#7a2b2b;border-color:#9a3a3a;color:#fff}
+  button.on{background:linear-gradient(180deg,#0ea5e9,#0284c7);border-color:#38bdf8;color:#fff}
+  header{padding:9px 16px;background:linear-gradient(180deg,#0b1322,#080c14);border-bottom:1px solid var(--line);
+         display:flex;align-items:center;gap:16px;flex-wrap:wrap;position:sticky;top:0;z-index:30}
+  header h1{font-size:15px;margin:0;letter-spacing:1.5px;font-weight:700;
+            background:linear-gradient(90deg,#67e8f9,#38bdf8);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .dot{width:9px;height:9px;border-radius:50%;background:#ff4d4f;display:inline-block;margin-right:7px;box-shadow:0 0 8px #ff4d4f}
+  .dot.on{background:#36d399;box-shadow:0 0 10px #36d399}
+  .ident{display:flex;gap:14px;flex-wrap:wrap;color:var(--mut);font-size:12px;align-items:center}
+  .ident b{color:var(--fg)}
+  .toolbar{display:flex;gap:10px;align-items:center;padding:8px 16px;background:rgba(13,19,32,.6);border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .grp{display:flex;gap:6px;align-items:center;position:relative}
+  .grp label{color:var(--mut);font-size:11px}
+  /* stat cards */
+  .stats{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;padding:12px 16px}
+  .stat{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:10px;padding:10px 12px;position:relative;overflow:hidden}
+  .stat::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--acc)}
+  .stat.g::before{background:var(--grant)} .stat.e::before{background:var(--emerg)} .stat.s::before{background:var(--enc)}
+  .stat.a::before{background:var(--aff)} .stat.r::before{background:var(--reg)} .stat.c::before{background:var(--acc)} .stat.t::before{background:var(--mut)}
+  .stat .v{font-size:24px;font-weight:700;font-family:ui-monospace,monospace;line-height:1}
+  .stat .k{color:var(--mut);font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-top:5px}
+  .stat.e .v{color:var(--emerg)} .stat.s .v{color:var(--enc)}
+  main{display:grid;grid-template-columns:1.4fr 1fr;gap:12px;padding:4px 16px 18px;align-items:start}
+  .panel{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:0 6px 22px rgba(0,0,0,.35)}
+  .phead{font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--mut);margin:0;padding:9px 12px;
+         border-bottom:1px solid var(--line);background:rgba(255,255,255,.02);display:flex;justify-content:space-between;align-items:center;cursor:grab}
+  .phead .ttl{display:flex;align-items:center;gap:8px}
+  .phead .x{cursor:pointer;color:var(--mut);font-size:13px;padding:0 4px}
+  .phead .x:hover{color:var(--fg)}
+  .panel.collapsed .pbody{display:none}
+  .tabs{display:flex;gap:3px}
+  .tabs button{font-size:11px;padding:2px 9px;color:var(--mut);border-color:transparent;background:transparent;border-radius:6px}
+  .tabs button.active{color:#fff;background:rgba(56,189,248,.15);border-color:rgba(56,189,248,.4)}
+  .feed{height:44vh;overflow:auto}
+  .row{display:grid;grid-template-columns:70px 60px 1fr;gap:8px;padding:4px 12px;border-bottom:1px solid rgba(255,255,255,.04)}
+  .row:hover{background:rgba(255,255,255,.03)}
+  .row .t{color:var(--mut);font-family:ui-monospace,monospace;font-size:11px}
+  .tag{font-weight:700;font-size:11px}
+  .GRANT .tag{color:var(--grant)} .AFFIL .tag{color:var(--aff)} .REG .tag,.DEREG .tag{color:var(--reg)} .CRYPT .tag{color:var(--enc)} .REGFAIL .tag{color:#ff4d4f}
+  .CALLEND .tag{color:var(--mut)} .row.CALLEND{opacity:.72}
+  .row.em{background:rgba(255,77,79,.14)} .row.em .tag{color:var(--emerg)}
+  .row.enc{background:rgba(240,180,41,.10)}
+  .row.wa{box-shadow:inset 3px 0 0 var(--watch)}
+  .badge{font-size:9px;padding:1px 6px;border-radius:7px;margin-left:6px;font-weight:700}
+  .badge.E{background:var(--emerg);color:#fff} .badge.S{background:var(--enc);color:#000} .badge.W{background:var(--watch);color:#000}
+  /* active calls grid */
+  .calls{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;padding:12px;min-height:60px}
+  .call{background:#0c1420;border:1px solid var(--line);border-left:3px solid var(--grant);border-radius:9px;padding:8px 10px;animation:pop .2s}
+  @keyframes pop{from{transform:scale(.96);opacity:.4}to{transform:scale(1);opacity:1}}
+  .call.em{border-left-color:var(--emerg);box-shadow:0 0 14px rgba(255,77,79,.4);animation:pulse 1s infinite}
+  @keyframes pulse{50%{box-shadow:0 0 4px rgba(255,77,79,.2)}}
+  .call.enc{border-left-color:var(--enc)}
+  .call .ct{font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .call .cm{color:var(--mut);font-size:11px;margin-top:3px;font-family:ui-monospace,monospace}
+  .call .cb{margin-top:4px}
+  table{width:100%;border-collapse:collapse}
+  th,td{text-align:left;padding:5px 10px;border-bottom:1px solid rgba(255,255,255,.04);font-size:12px}
+  th{color:var(--mut);position:sticky;top:0;background:#0f1521;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.5px}
+  tr:hover td{background:rgba(255,255,255,.02)}
+  .scroll{max-height:32vh;overflow:auto}
+  td.num{color:var(--mut);text-align:right;font-family:ui-monospace,monospace}
+  input.edit{width:96%;padding:2px 6px;background:transparent;border:1px solid transparent;border-radius:4px}
+  input.edit:hover{border-color:var(--line)} input.edit:focus{border-color:var(--acc);background:#0b111c}
+  .em-pill{color:var(--emerg);font-weight:700;font-size:10px} .s-pill{color:var(--enc);font-weight:700;font-size:10px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 12px 10px}
+  .small{font-size:11px;color:var(--mut);padding:8px 12px}
+  .pop{position:fixed;z-index:50;top:104px;right:16px;left:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;width:min(440px,calc(100vw - 32px));max-height:80vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.6)}
+  .pop label{display:block;color:var(--mut);font-size:11px;margin:7px 0 3px}
+  .wchip{display:inline-block;background:#16202f;border:1px solid var(--line);border-radius:20px;padding:2px 10px;margin:3px;cursor:pointer;font-family:ui-monospace,monospace;font-size:11px}
+  .wchip:hover{border-color:var(--watch);color:var(--watch)}
+  details>summary{cursor:pointer;color:var(--mut);list-style:none;padding:5px 9px;border:1px solid var(--line);border-radius:6px;font-size:12px}
+  details[open]>summary{border-color:var(--acc);color:var(--fg)}
+  .pill{font-size:10px;padding:1px 7px;border-radius:10px;background:#16202f;border:1px solid var(--line);color:var(--mut)}
+  /* icons */
+  .ic{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto;vertical-align:-2px}
+  .ic.grip{width:13px;height:13px;color:var(--mut);cursor:grab}
+  h1 .ic{width:18px;height:18px;stroke:#38bdf8;vertical-align:-3px;margin-right:2px}
+  .stat .ico{position:absolute;right:9px;top:9px;opacity:.22;width:24px;height:24px;stroke-width:1.8}
+  .phead .ttl .ic{color:var(--acc)}
+  button .ic,summary .ic{width:14px;height:14px;margin-right:4px}
+  /* diagnostics */
+  .dgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px}
+  .dcard{background:#0c1420;border:1px solid var(--line);border-radius:10px;padding:11px 12px}
+  .dk{color:var(--mut);font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+  .meter{height:7px;background:#1a2233;border-radius:4px;overflow:hidden;margin:4px 0}
+  .meter>i{display:block;height:100%;background:linear-gradient(90deg,#38bdf8,#36d399);border-radius:4px;transition:width .4s}
+  .meter.warn>i{background:linear-gradient(90deg,#f0b429,#ff4d4f)}
+  .dl{display:flex;justify-content:space-between;font-size:12px;padding:2px 0;align-items:center}
+  .dl .mut{color:var(--mut)} .dl b{font-family:ui-monospace,monospace}
+  .ber-ok{color:#36d399}.ber-warn{color:#f0b429}.ber-bad{color:#ff4d4f}
+  /* watched-radio coverage cards + detail modal */
+  .wcard{background:#0c1420;border:1px solid var(--line);border-radius:9px;padding:8px 10px;margin:6px 0;cursor:pointer;transition:border-color .15s}
+  .wcard:hover{border-color:var(--acc)}
+  .wcard.trouble{border-left:3px solid #ff4d4f}
+  .wcard-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .wcard-rid{font-family:ui-monospace,monospace;font-weight:700;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .wcard-site{font-size:10px;color:var(--mut);white-space:nowrap}
+  .wmet{display:flex;gap:14px;margin-top:7px;align-items:center;flex-wrap:wrap}
+  .wbar{display:flex;align-items:center;gap:5px;font-size:11px}
+  .wbar .lab{color:var(--mut);font-size:10px}
+  .gauge{width:60px;height:6px;background:#1c2636;border-radius:4px;overflow:hidden}
+  .gauge>i{display:block;height:100%;border-radius:4px}
+  .spk{display:inline-flex;align-items:flex-end;gap:1px;height:16px}
+  .spk>i{width:3px;background:#334155;border-radius:1px}
+  .q-strong{color:#36d399}.q-good{color:#7bd88f}.q-marg{color:#f0b429}.q-weak{color:#ff4d4f}
+  .g-strong{background:#36d399}.g-good{background:#7bd88f}.g-marg{background:#f0b429}.g-weak{background:#ff4d4f}
+  .modal-bg{position:fixed;inset:0;background:rgba(2,6,12,.72);z-index:80;display:none;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto}
+  .modal-bg.show{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:12px;width:min(560px,100%);box-shadow:0 20px 60px rgba(0,0,0,.6)}
+  .modal h3{margin:0;padding:13px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;font-size:14px}
+  .modal .body{padding:12px 16px}
+  .modal .sec{margin:12px 0}
+  .modal .sec h4{margin:0 0 5px;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--mut)}
+  .modal .x{cursor:pointer;color:var(--mut);font-size:20px;line-height:1}
+  .hint{font-size:11px;color:#9fb0c8;background:#0e1826;border-left:3px solid var(--acc);border-radius:6px;padding:7px 9px;margin-top:6px}
+  .hint.warn{border-left-color:#f0b429}.hint.bad{border-left-color:#ff4d4f}
+  .tl{font-family:ui-monospace,monospace;font-size:11px;max-height:170px;overflow:auto}
+  .tl .r{display:flex;gap:8px;padding:2px 0;border-bottom:1px solid #131c2a}
+  /* pinned / locked talkgroups */
+  .pinbar{padding:6px 8px;margin:0 0 6px;background:#0c1420;border:1px solid var(--line);border-radius:9px}
+  .pinrow{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .pinrow input{width:96px;background:#0a121e;border:1px solid var(--line);border-radius:6px;color:var(--fg);padding:4px 8px;font-family:ui-monospace,monospace;font-size:12px}
+  .pinchips{margin-top:6px;display:flex;flex-wrap:wrap;gap:4px}
+  .pinchips:empty{display:none}
+  .pinchip{display:inline-flex;align-items:center;gap:5px;background:#12243a;border:1px solid #1f6feb;border-radius:20px;padding:2px 6px 2px 9px;font-family:ui-monospace,monospace;font-size:11px;color:#cfe0ff}
+  .pinchip .x{cursor:pointer;color:#8aa8d8;font-weight:700}
+  .pinchip .x:hover{color:#fff}
+  .tgpin{cursor:pointer;user-select:none}
+  .tgpin.on{color:#58a6ff}
+  /* virtual pager device */
+  .pager-dev{max-width:430px;margin:8px auto;background:linear-gradient(180deg,#2c323e,#181b22);border:1px solid #3a4150;border-radius:20px;padding:14px 16px 16px;box-shadow:0 10px 28px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.06)}
+  .pager-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
+  .pager-brand{font-size:10px;letter-spacing:1.5px;color:#7d8aa0;font-weight:700}
+  .pager-led{width:10px;height:10px;border-radius:50%;background:#2a3340;box-shadow:inset 0 0 2px #000}
+  .pager-led.on{background:#34d399;box-shadow:0 0 8px #34d399}
+  .pager-led.alert{background:#f0b429;box-shadow:0 0 12px #f0b429;animation:pgrblink .4s steps(2,start) infinite}
+  @keyframes pgrblink{50%{opacity:.2}}
+  .pager-lcd{background:#aebd86;color:#161c0c;border-radius:7px;padding:10px 12px;min-height:92px;font-family:'Consolas','Courier New',monospace;box-shadow:inset 0 2px 10px rgba(0,0,0,.4);border:1px solid #5d6647;text-shadow:0 1px 0 rgba(255,255,255,.12)}
+  .pager-lcd .ph{font-size:11px;display:flex;justify-content:space-between;color:#39431f;border-bottom:1px solid rgba(0,0,0,.18);padding-bottom:4px;margin-bottom:5px;font-weight:700}
+  .pager-lcd .pb{font-size:13px;line-height:1.4;white-space:pre-wrap;word-break:break-word;min-height:48px}
+  .pager-btns{display:flex;justify-content:center;align-items:center;gap:6px;margin-top:11px}
+  .pgr-nav{background:#222834;border:1px solid #3a4150;color:#c5cee0;border-radius:7px;padding:5px 11px;font-size:12px;cursor:pointer}
+  .pgr-nav:hover{background:#2a3242}
+  .pgr-grid{display:grid;grid-template-columns:minmax(330px,400px) 1fr;gap:18px;align-items:start}
+  @media(max-width:900px){.pgr-grid{grid-template-columns:1fr}}
+  #pgrPages{max-height:74vh;overflow:auto;padding-right:4px}
+  .pgr-page{padding:6px 2px;border-bottom:1px solid var(--line)}
+  .pgr-page .ph{font-size:11px;color:#7d8aa0;display:flex;gap:8px;flex-wrap:wrap}
+  .pgr-page .pt{white-space:pre-wrap;word-break:break-word;font-size:13px;line-height:1.4;margin-top:2px;font-family:'Consolas','Courier New',monospace}
+  .pgr-page.match{background:rgba(240,180,41,.09);border-left:2px solid #f0b429;padding-left:7px}
+  /* emulator config form */
+  .emu-form{display:grid;grid-template-columns:1fr 1fr;gap:7px 12px}
+  .emu-form label{display:flex;flex-direction:column;font-size:11px;color:#94a3b8;gap:3px;text-transform:none;letter-spacing:0}
+  .emu-form input{width:100%}
+  .emu-warn{background:rgba(240,77,79,.12);border:1px solid rgba(240,77,79,.4);border-radius:8px;padding:8px 10px;margin-bottom:8px}
+  .emu-res .dl b{font-family:'Consolas',monospace}
+  /* audio mixer */
+  .mixer{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.02)}
+  .mx{display:flex;align-items:center;gap:8px;font-size:11px}
+  .mx .mxl{flex:1;color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .mx button{padding:2px 9px;font-size:11px}
+  .mx button.on{background:linear-gradient(180deg,#0ea5e9,#0284c7);border-color:#38bdf8;color:#fff}
+  .mx.liverow .mxl{color:#36d399;font-weight:600}
+  /* scanner */
+  .scanbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 12px;border-bottom:1px solid var(--line)}
+  .scanbar label{font-size:12px;color:var(--mut)}
+  #scanStatus{padding:8px 12px;border-bottom:1px solid var(--line)}
+  .seg{display:flex} .seg button{border-radius:0;border-right:0} .seg button:first-child{border-radius:6px 0 0 6px} .seg button:last-child{border-radius:0 6px 6px 0;border-right:1px solid var(--line)}
+  /* ---- navigation overhaul: menu bar + view tabs ---- */
+  .menubar{display:flex;align-items:center;gap:3px;padding:0 14px;height:46px;background:linear-gradient(180deg,#0c1322,#080c14);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:60}
+  .menubar .brand{font-size:14px;font-weight:700;letter-spacing:1.1px;margin-right:8px;display:flex;align-items:center;gap:7px;background:linear-gradient(90deg,#67e8f9,#38bdf8);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .menubar .brand .ic{stroke:#38bdf8;width:18px;height:18px}
+  .menu{position:relative}
+  .mbtn{background:transparent;border:1px solid transparent;color:var(--fg);padding:6px 11px;border-radius:7px;font-size:13px}
+  .mbtn:hover,.menu.open .mbtn{background:rgba(56,189,248,.12);border-color:rgba(56,189,248,.35)}
+  .mdrop{display:none;position:absolute;top:40px;left:0;min-width:310px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;box-shadow:0 14px 44px rgba(0,0,0,.6);z-index:70}
+  .menu.open .mdrop{display:block}
+  .mdrop label{display:block;color:var(--mut);font-size:11px;margin:7px 0 3px}
+  .mdrop .mrow{display:flex;gap:6px;margin:5px 0}
+  .mdrop .mrow>*{flex:1}
+  .mdrop hr{border:none;border-top:1px solid var(--line);margin:11px 0 7px}
+  .mdrop .msec{color:var(--acc);font-size:10px;text-transform:uppercase;letter-spacing:1px;margin:2px 0 5px}
+  .mbar-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+  .mbar-right .ident{font-size:11.5px}
+  .tabstrip{display:flex;align-items:center;gap:4px;padding:6px 14px;background:rgba(13,19,32,.55);border-bottom:1px solid var(--line);position:sticky;top:46px;z-index:55;flex-wrap:wrap}
+  .vtab{background:transparent;border:1px solid transparent;color:var(--mut);padding:7px 13px;border-radius:8px;font-size:13px;display:flex;align-items:center;gap:7px}
+  .vtab:hover{color:var(--fg)}
+  .vtab.active{color:#fff;background:linear-gradient(180deg,rgba(56,189,248,.18),rgba(56,189,248,.06));border-color:rgba(56,189,248,.45)}
+  .vtab .ic{width:15px;height:15px}
+  .tab-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+  .grip{display:none}
+  /* views: only the active view's panels show */
+  #main>.panel[data-view]{display:none}
+  #main.v-live .panel[data-view="live"],#main.v-dir .panel[data-view="dir"],#main.v-system .panel[data-view="system"],#main.v-scanner .panel[data-view="scanner"],#main.v-map .panel[data-view="map"],#main.v-pager .panel[data-view="pager"],#main.v-emulator .panel[data-view="emulator"]{display:block}
+  #main.v-live{grid-template-columns:1.5fr 1fr} #main.v-dir{grid-template-columns:1fr 1fr} #main.v-system{grid-template-columns:1.3fr 1fr} #main.v-scanner{grid-template-columns:1fr} #main.v-map{grid-template-columns:1fr}
+  .mbtn2{background:#16202f;border:1px solid var(--line);color:var(--mut);padding:4px 9px;border-radius:7px;font-size:12px;cursor:pointer}
+  .mbtn2:hover{color:#fff} .mbtn2.on{color:#fff;border-color:rgba(56,189,248,.5);background:rgba(56,189,248,.14)}
+  .maplbl{background:rgba(10,15,23,.85)!important;border:1px solid var(--line)!important;color:#dbe7f5!important;font-size:11px!important;box-shadow:none!important;padding:1px 6px!important}
+  .maplbl:before{display:none!important}
+  #lgmap{position:relative;z-index:0;isolation:isolate}
+  .menu .mdrop{z-index:2000}
+  #main .feed{height:calc(100vh - 232px)} #main .scroll{max-height:calc(100vh - 250px)}
+  #main #scanCands,#main #scanFound{max-height:calc(100vh - 320px)!important}
+  /* compact stats */
+  .stats{grid-template-columns:repeat(7,1fr);gap:8px;padding:8px 14px} .stat{padding:7px 11px} .stat .v{font-size:20px} .stat .ico{width:20px;height:20px}
+  /* ---- uConsole mode: whole UI scaled up, one panel per view at a time with a panel tab bar ---- */
+  body.uc{zoom:var(--ucz,1.35)}
+  body.uc #main{grid-template-columns:1fr!important}
+  body.uc #main .panel.uc-off{display:none!important}
+  body.uc #main .feed{height:auto;min-height:320px;max-height:none} body.uc #main .scroll{max-height:none}
+  body.uc .phead .grip{display:none}
+  .ucstrip{display:none} body.uc .ucstrip:not(:empty){display:flex;gap:4px;flex-wrap:wrap;padding:5px 14px;background:rgba(13,19,32,.75);border-bottom:1px solid var(--line)}
+  .ucstrip button{background:#16202f;border:1px solid var(--line);color:var(--mut);padding:6px 12px;border-radius:8px;font-size:13px;cursor:pointer}
+  .ucstrip button.active{color:#fff;border-color:rgba(56,189,248,.6);background:rgba(56,189,248,.18)}
+  .ucz{display:none} body.uc .ucz{display:inline-block}
+  #ucBtn.on{color:#fff;border-color:rgba(56,189,248,.6);background:rgba(56,189,248,.18)}
+  /* header wraps instead of squeezing: menus on row 1, controls on row 2, site ident on its own line */
+  body.uc{overflow-x:hidden}
+  body.uc .menubar{height:auto;flex-wrap:wrap;row-gap:4px;padding:4px 10px;position:static}
+  body.uc .menubar .brand{display:none}
+  body.uc .mbar-right{flex-basis:100%;margin-left:0;flex-wrap:wrap;gap:6px}
+  body.uc .mbar-right .ident{flex-basis:100%;order:9;gap:12px;font-size:12px}
+  body.uc .tabstrip{position:static}
+</style>
+<link rel="stylesheet" href="/vendor/leaflet/leaflet.css"/>
+<script src="/vendor/leaflet/leaflet.js"></script>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="i-tower" viewBox="0 0 24 24"><path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9"/><path d="M7.8 4.7a6.14 6.14 0 0 0 0 8.6"/><circle cx="12" cy="9" r="2"/><path d="M16.2 4.7a6.14 6.14 0 0 1 0 8.6"/><path d="M19.1 1.9a9 9 0 0 1 0 14.2"/><path d="M12 11v10"/><path d="m8 21 4-4 4 4"/></symbol>
+  <symbol id="i-zap" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/></symbol>
+  <symbol id="i-usercheck" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m16 11 2 2 4-4"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></symbol>
+  <symbol id="i-radio" viewBox="0 0 24 24"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2a6.14 6.14 0 0 1 0-8.4"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6.14 6.14 0 0 1 0 8.4"/><path d="M19.1 4.9a9 9 0 0 1 0 14.2"/></symbol>
+  <symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="1" x2="7" y1="14" y2="14"/><line x1="9" x2="15" y1="8" y2="8"/><line x1="17" x2="23" y1="16" y2="16"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-head" viewBox="0 0 24 24"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></symbol>
+  <symbol id="i-gauge" viewBox="0 0 24 24"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></symbol>
+  <symbol id="i-signal" viewBox="0 0 24 24"><path d="M2 20h.01"/><path d="M7 20v-4"/><path d="M12 20v-8"/><path d="M17 20V8"/><path d="M22 4v16"/></symbol>
+  <symbol id="i-bars" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></symbol>
+  <symbol id="i-broadcast" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49M7.76 16.25a6 6 0 0 1 0-8.49"/><path d="M20.07 4.93a10 10 0 0 1 0 14.14M3.93 19.07a10 10 0 0 1 0-14.14"/></symbol>
+  <symbol id="i-activity" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></symbol>
+  <symbol id="i-map" viewBox="0 0 24 24"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21 3 6"/><line x1="9" x2="9" y1="3" y2="18"/><line x1="15" x2="15" y1="6" y2="21"/></symbol>
+</defs></svg>
+<div class="menubar">
+  <div class="brand"><span id="live" class="dot"></span><svg class="ic"><use href="#i-tower"/></svg>SDR LOOKING GLASS</div>
+  <div class="menu"><button class="mbtn"><svg class="ic"><use href="#i-sliders"/></svg> System</button><div class="mdrop">
+    <div class="mrow"><button id="ctlStart">restart</button><button id="ctlStop" class="warn">stop</button></div>
+    <div class="mrow"><button id="wbBtn" title="Wideband: decode the control channel AND voice simultaneously">wideband: off</button><button id="ccBtn" title="CC-only: stay glued to the control channel">CC-only: off</button></div>
+    <div class="mrow"><button id="monAll" title="Unpin all talkgroups — receiver follows all voice again">scan all (unpin)</button></div>
+    <hr><div class="msec">Edit active system</div>
+    <label>name</label><input id="eName" style="width:100%">
+    <div class="mrow"><div><label>county</label><input id="eCounty" list="countyList" style="width:100%"><datalist id="countyList"><option>Broward</option><option>Miami-Dade</option><option>Palm Beach</option><option>Monroe</option></datalist></div><div><label>system type</label><select id="eType" style="width:100%"><option>P25 Phase I</option><option>P25 Phase II</option><option>P25 Phase I CC / II voice</option><option>DMR Tier III</option><option>SmartNet/SmartZone</option><option>Conventional P25</option><option>NXDN</option></select></div></div>
+    <label>control channels (comma separated MHz)</label><input id="eCC" style="width:100%">
+    <div class="mrow"><div><label>modulation</label><select id="eMod" style="width:100%"><option>cqpsk</option><option>fsk4</option></select></div><div><label>NAC (display)</label><input id="eNac" style="width:100%"></div></div>
+    <div class="mrow"><button id="eSave" class="go">Save</button><button id="eLoad">Load active</button><button id="eDel" class="warn">Delete</button></div>
+    <div class="mrow" style="margin-top:6px"><a href="/api/systems/export" download class="mbtn2" style="text-decoration:none;text-align:center;flex:1">⬇ Export systems JSON</a><button id="sysImport" class="mbtn2" style="flex:1">⬆ Import JSON</button><input type="file" id="sysImportFile" accept=".json,application/json" style="display:none"></div>
+  </div></div>
+  <div class="menu"><button class="mbtn"><svg class="ic"><use href="#i-sliders"/></svg> SDR</button><div class="mdrop">
+    <label>gains</label><input id="sdrGains" style="width:100%">
+    <div class="mrow"><div><label>offset (Hz)</label><input id="sdrOffset" style="width:100%"></div><div><label>ppm</label><input id="sdrPpm" style="width:100%"></div></div>
+    <div class="mrow"><div><label>rate</label><input id="sdrRate" style="width:100%"></div><div><label>device args</label><input id="sdrArgs" style="width:100%"></div></div>
+    <button id="sdrApply" class="go" style="margin-top:10px;width:100%">Apply &amp; restart</button>
+  </div></div>
+  <div class="menu"><button class="mbtn"><svg class="ic"><use href="#i-upload"/></svg> Import</button><div class="mdrop">
+    <div class="small" style="padding:0 0 6px">Paste RadioReference list. Auto-detects ID+name, or set columns (0-based).</div>
+    <textarea id="impText" style="width:100%;height:104px"></textarea>
+    <div class="mrow"><div><label>type</label><select id="impType" style="width:100%"><option value="tg">Talkgroups</option><option value="rid">Radios (RID)</option></select></div><div><label>columns (opt)</label><div style="display:flex;gap:4px"><input id="impId" placeholder="id col" style="width:50%"><input id="impName" placeholder="name col" style="width:50%"></div></div></div>
+    <button id="impBtn" class="go" style="margin-top:10px;width:100%">Import</button> <span class="small" id="impMsg"></span>
+  </div></div>
+  <div class="menu"><button class="mbtn">&#128204; Listen TG</button><div class="mdrop">
+    <label>talkgroup to listen to</label>
+    <div style="display:flex;gap:5px"><input id="lisInp" inputmode="numeric" placeholder="e.g. 2002" style="flex:1"><button id="lisAdd" class="go">Listen</button></div>
+    <div class="small" style="margin-top:6px">Locks the receiver to these talkgroups (turns CC-only off) and turns audio on. Add several to follow a group.</div>
+    <div id="lisChips" class="pinchips" style="margin-top:8px"></div>
+    <button id="lisClear" class="mbtn2" style="margin-top:8px">scan all (unlock)</button>
+  </div></div>
+  <div class="menu"><button class="mbtn">&#128273; Keys</button><div class="mdrop" style="min-width:380px">
+    <div class="small">Test your own keys. Stored on this device only (owner-only file, not in exports); never displayed again after saving.</div>
+    <div class="mrow"><div><label>key ID (hex)</label><input id="keyId" placeholder="e.g. 1A2B" autocomplete="off"></div>
+      <div><label>algorithm</label><select id="keyAlg"><option value="0x84">AES-256 (84)</option><option value="0x81">DES-OFB (81)</option><option value="0xaa">ADP / RC4 (AA)</option></select></div></div>
+    <label>key (hex)</label><input id="keyHex" type="password" autocomplete="off" placeholder="64 hex chars for AES-256" style="width:100%">
+    <label>label (optional)</label><input id="keyLbl" placeholder="e.g. key name" style="width:100%" autocomplete="off">
+    <button id="keyAdd" class="go" style="margin-top:10px;width:100%">Save key &amp; reload decoder</button>
+    <div class="small" id="keyMsg" style="margin-top:4px"></div>
+    <label>stored keys</label><div id="keyList" class="small"></div>
+    <label>seen on air (encrypted talkgroups)</label><div id="keySeen" class="small">none yet</div>
+  </div></div>
+  <div class="menu"><button class="mbtn"><svg class="ic"><use href="#i-eye"/></svg> Watch</button><div class="mdrop">
+    <label>watch radio ID</label>
+    <div style="display:flex;gap:5px"><input id="watchInp" placeholder="e.g. 7895144" style="flex:1"><button id="watchAdd" class="go">Watch</button></div>
+    <div id="watchChips" style="margin-top:10px"></div>
+    <label>watch session &rarr; report</label>
+    <div style="display:flex;gap:6px;align-items:center"><button id="wsBtn" class="go">&#9654; Start watch</button><span id="wsStatus" class="small mut"></span></div>
+    <div id="wsReports" class="small" style="margin-top:6px"></div>
+  </div></div>
+  <div class="mbar-right">
+    <button id="ucBtn" title="uConsole mode: larger text, one panel at a time with tabs">&#128241; uConsole</button>
+    <button id="ucMinus" class="ucz" title="smaller">A&minus;</button><button id="ucPlus" class="ucz" title="larger">A+</button>
+    <button id="coScreen" title="uConsole screen + app launcher in this browser (remote console)" onclick="window.open('https://'+location.hostname+':6080/','co-screen')">&#128421; Screen</button><script>if(/^(127\.|localhost$|\[?::1)/.test(location.hostname))document.getElementById('coScreen').style.display='none'</script>
+    <button id="fsBtn" title="fullscreen (F11)">&#x26F6;</button>
+    <span class="ident" id="sys"></span>
+    <button id="rssiPill" class="mbtn2" title="Channel signal level (dBFS, relative). Click for the antenna/RSSI meter.">&#128246; RSSI —</button>
+    <button id="ccData" title="CC-only (data mode): stay glued to the control channel and decode EVERY trunking message — affiliations, registrations, grants for all radios — instead of tuning away to follow voice calls. Best for watching a radio's behavior / coverage. No voice audio in this mode.">&#128225; CC-only: off</button>
+    <button id="audioBtn" title="Local audio mute only — this does NOT change tuning. OP25 still follows voice unless CC-only is on.">&#127911; audio: off</button>
+    <button id="boostBtn" title="Digital volume boost for decoded voice (limited, so loud calls don't clip). Small speakers like the uConsole's need 2-4x.">&#128266; boost: 1x</button>
+    <span class="small mono" id="nowPlaying"></span>
+  </div>
+</div>
+
+<div class="stats" id="stats"></div>
+
+<div class="tabstrip">
+  <button class="vtab active" data-view="live"><svg class="ic"><use href="#i-radio"/></svg>Live</button>
+  <button class="vtab" data-view="dir"><svg class="ic"><use href="#i-users"/></svg>Talkgroups &amp; Radios</button>
+  <button class="vtab" data-view="system"><svg class="ic"><use href="#i-tower"/></svg>System &amp; Diagnostics</button>
+  <button class="vtab" data-view="scanner"><svg class="ic"><use href="#i-broadcast"/></svg>Scanner</button>
+  <button class="vtab" data-view="map"><svg class="ic"><use href="#i-map"/></svg>Map</button>
+  <button class="vtab" data-view="pager"><svg class="ic"><use href="#i-broadcast"/></svg>Pager</button>
+  <button class="vtab" data-view="emulator"><svg class="ic"><use href="#i-tower"/></svg>Emulator</button>
+  <span class="tab-right">
+    <select id="sysSel" style="min-width:210px"></select><button id="switchBtn" class="go">Switch</button>
+    <span id="op25" class="small mono"></span>
+  </span>
+</div>
+<div class="ucstrip" id="ucStrip"></div>
+<main id="main" class="views v-live">
+  <section class="panel" data-id="events" data-view="live">
+    <div class="phead" draggable="true"><div class="ttl"><svg class="ic grip"><use href="#i-grip"/></svg><svg class="ic"><use href="#i-activity"/></svg>Live Events
+      <span class="tabs" id="tabs">
+        <button data-f="all" class="active">All</button><button data-f="grant">Grants</button>
+        <button data-f="emergency">Emergency</button><button data-f="secure">Secure</button>
+        <button data-f="affil">Affil</button><button data-f="reg">Reg</button>
+        <button data-f="watch">Watch</button><button data-f="data">Data</button><button data-f="cc">CC raw</button></span></div>
+      <span class="x" data-collapse>—</span></div>
+    <div class="pbody"><div class="feed" id="feed"></div></div>
+  </section>
+  <section class="panel" data-id="rssi" data-view="live">
+    <div class="phead" draggable="true"><div class="ttl"><svg class="ic grip"><use href="#i-grip"/></svg><svg class="ic"><use href="#i-signal"/></svg>Antenna / RSSI — tune for the highest reading</div><span class="x" data-collapse>—</span></div>
+    <div class="pbody">
+      <div style="display:flex;align-items:flex-end;gap:18px;flex-wrap:wrap">
+        <div><div class="small mut">signal (dBFS)</div><div id="rsBig" style="font-size:56px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums">—</div></div>
+        <div><div class="small mut">peak hold</div><div id="rsPeak" style="font-size:28px;font-weight:700;font-variant-numeric:tabular-nums">—</div></div>
+        <div><div class="small mut">change vs 10 s ago</div><div id="rsDelta" style="font-size:28px;font-weight:700;font-variant-numeric:tabular-nums">—</div></div>
+        <button id="rsReset" class="mbtn2">reset peak</button>
+      </div>
+      <div style="margin:10px 0 4px;height:22px;background:#0b1220;border:1px solid var(--line);border-radius:6px;overflow:hidden;position:relative">
+        <div id="rsBar" style="height:100%;width:0;background:linear-gradient(90deg,#f87171,#facc15 45%,#4ade80);transition:width .3s"></div>
+        <div id="rsPeakMark" style="position:absolute;top:0;bottom:0;width:3px;background:#fff;left:0"></div></div>
+      <div class="small mut" style="display:flex;justify-content:space-between"><span>-90</span><span>-60</span><span>-30</span><span>0 dBFS</span></div>
+      <canvas id="rsSpark" height="90" style="width:100%;margin-top:8px;background:#0b1220;border:1px solid var(--line);border-radius:6px"></canvas>
+      <div class="small mut" id="rsInfo" style="margin-top:6px"></div>
+    </div>
+  </section>
+  <section class="panel" data-id="calls" data-view="live">
+    <div class="phead" draggable="true"><div class="ttl"><svg class="ic grip"><use href="#i-grip"/></svg><svg class="ic"><use href="#i-radio"/></svg>Active Calls <span class="pill" id="callCount">0</span></div><span class="x" data-collapse>—</span></div>
+    <div class="pbody"><div id="mixer" class="mixer"></div><div class="calls" id="activeCalls"></div></div>
+  </section>
+  <section class="panel" data-id="tgs" data-view="dir">
+    <div class="phead" draggable="true"><div class="ttl"><svg class="ic grip"><use href="#i-grip"/></svg><svg class="ic"><use href="#i-users"/></svg>Talkgroups — 📌 pin to lock the receiver on a TG, name to label</div><span class="x" data-collapse>—</span></div>
+    <div class="pbody">
+      <div class="pinbar">
+        <div class="pinrow">
+          <input id="pinInput" type="text" inputmode="numeric" placeholder="pin TG #" autocomplete="off">
+          <button id="pinAdd" class="mbtn2">📌 Pin</button>
+          <button id="pinClear" class="mbtn2" title="unpin all — follow all voice">scan all</button>
+          <span id="pinStatus" class="small mut" style="margin-left:auto"></span>
+        </div>
+        <div id="pinChips" class="pinchips"></div>
+      </div>
+      <div class="scroll"><table id="tgs">
+      <thead><tr><th>TGID</th><th>Name</th><th>Last RID</th><th>Mode</th><th class="num">Count</th><th>Last</th></tr></thead>
+      <tbody></tbody></table></div></div>
+  </section>
+  <section class="panel" data-id="rids" data-view="dir">
+    <div class="phead" draggable="true"><div class="ttl"><svg class="ic grip"><use href="#i-grip"/></svg><svg class="ic"><use href="#i-broadcast"/></svg>Radios / RIDs — click alias to label, RID to watch</div><span class="x" data-collapse>—</span></div>
+    <div class="pbody"><div class="scroll"><table id="rids">
+      <thead><tr><th>RID</th><th>Alias</th><th>Action</th><th>Last TG</th><th class="num">Count</th><th>Last</th></tr></thead>
+      <tbody></tbody></table></div></div>
+  </section>
+  <section class="panel" data-id="watch" data-view="dir">
+    <div class="phead" draggable="true"><div class="ttl"><svg class="ic grip"><use href="#i-grip"/></svg><svg class="ic"><use href="#i-usercheck"/></svg>Watched Radios — activity <span class="pill" id="watchCount">0</span></div><span class="x" data-collapse>—</span></div>
+    <div class="pbody">
+      <div class="small mut" style="padding:2px 0">Watch a radio (add a RID in the menu bar, or click a RID in the Radios table). Each card shows the site it's on and how the tower hears it (RF / BER). <b>Click a card</b> for full coverage diagnostics.</div>
+      <div id="watchCards" style="max-height:40vh;overflow:auto;padding:2px 0"></div>
+      <div class="small mut" style="margin-top:8px;border-top:1px solid var(--line);padding-top:6px;font-weight:700">Activity log</div>
+      <div id="watchAct" class="small" style="max-height:30vh;overflow:auto;padding:4px 0"></div>
+    </div>
+  </section>
+  <section class="panel" data-id="disco" data-view="system">
+    <div class="phead" draggable="true"><div class="ttl"><svg class="ic grip"><use href="#i-grip"/></svg><svg class="ic"><use href="#i-tower"/></svg>System Discovery</div><span class="x" data-collapse>—</span></div>
+    <div class="pbody"><div id="disco" class="small"></div>
+      <div class="grid2"><div><div class="phead" style="cursor:default"><div class="ttl">Adjacent Sites</div></div><div class="scroll"><table id="adj"></table></div></div>
+        <div><div class="phead" style="cursor:default"><div class="ttl">Band Plan</div></div><div class="scroll"><table id="band"></table></div></div></div></div>
+  </section>
+  <section class="panel" data-id="radiodiag" data-view="system">
+    <div class="phead" draggable="true"><div class="ttl"><svg class="ic grip"><use href="#i-grip"/></svg><svg class="ic"><use href="#i-signal"/></svg>Radio Diagnostics — BER of every radio seen</div><span class="x" data-collapse>—</span></div>
+    <div class="pbody">
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button id="dlBtn" class="go">&#9679; Start diagnostics log</button>
+        <a class="mbtn2" href="/api/radiodiag.csv">&#11015; table CSV</a><span id="dlStatus" class="small mut"></span></div>
+      <div class="small mut" style="margin:6px 0">Uplink RF/BER = codes the <i>site</i> reports per radio (Phase 2 power-control sig-qual; higher RF stronger, higher BER worse).
+        Voice err = vocoder error rate as this receiver decodes each talker (needs CC-only off so calls are followed).</div>
+      <div class="scroll" style="max-height:300px"><table id="rdTbl"></table></div>
+      <div class="small" id="rdFiles" style="margin-top:8px"></div>
+    </div>
+  </section>
+  <section class="panel" data-id="survey" data-view="system">
+    <div class="phead" draggable="true"><div class="ttl"><svg class="ic grip"><use href="#i-grip"/></svg><svg class="ic"><use href="#i-map"/></svg>Drive Survey — GPS-tagged control-channel health</div><span class="x" data-collapse>—</span></div>
+    <div class="pbody">
+      <div style="display:flex;gap:6px;align-items:center"><input id="svLabel" placeholder="survey label, e.g. WPB SOW" style="flex:1" autocomplete="off"><button id="svBtn" class="go">&#9679; Start survey</button></div>
+      <div id="svStatus" class="small mut" style="margin:6px 0"></div>
+      <div id="svNow" class="dgrid"></div>
+      <div class="scroll" style="max-height:220px;margin-top:8px"><table id="svTbl"></table></div>
+      <div class="small" id="svFiles" style="margin-top:8px"></div>
+    </div>
+  </section>
+  <section class="panel" data-id="diag" data-view="system">
+    <div class="phead" draggable="true"><div class="ttl"><svg class="ic grip"><use href="#i-grip"/></svg><svg class="ic"><use href="#i-gauge"/></svg>Site Diagnostics</div><span class="x" data-collapse>—</span></div>
+    <div class="pbody"><div class="dgrid">
+      <div class="dcard"><div class="dk"><svg class="ic"><use href="#i-bars"/></svg>Channel Utilization</div><div id="dgUtil">collecting…</div></div>
+      <div class="dcard"><div class="dk"><svg class="ic"><use href="#i-signal"/></svg>RF Signal Quality (BER)</div><div id="dgBer">collecting…</div></div>
+      <div class="dcard"><div class="dk"><svg class="ic"><use href="#i-activity"/></svg>Top Talkgroups</div><div id="dgCalls">collecting…</div></div>
+      <div class="dcard"><div class="dk"><svg class="ic"><use href="#i-heart"/></svg>Site Health</div><div id="dgHealth">collecting…</div></div>
+      <div class="dcard"><div class="dk"><svg class="ic"><use href="#i-gauge"/></svg>RF Calibration (GPS-locked CC)</div><div id="dgCal">collecting…</div></div>
+    </div></div>
+  </section>
+  <section class="panel" data-id="data" data-view="system">
+    <div class="phead" draggable="true"><div class="ttl"><svg class="ic grip"><use href="#i-grip"/></svg><svg class="ic"><use href="#i-list"/></svg>Data Channels &amp; Unhandled <span class="pill" id="dcCount">0</span></div>
+      <label class="small" style="margin-left:auto;margin-right:8px;cursor:pointer;text-transform:none;letter-spacing:0"><input type="checkbox" id="dcShow" checked style="vertical-align:middle"> details</label>
+      <span class="x" data-collapse>—</span></div>
+    <div class="pbody">
+      <div class="dk"><svg class="ic"><use href="#i-broadcast"/></svg>SNDCP packet-data channels</div>
+      <div class="scroll" style="max-height:30vh"><table id="dchans"></table></div>
+      <div class="dk" style="margin-top:10px"><svg class="ic"><use href="#i-signal"/></svg>Packet-data probe — is the payload clear or encrypted (GPS)?</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:2px 0">
+        <button id="probeData" class="mbtn2">⌖ Probe busiest data channel (~75s)</button>
+        <span id="probeStat" class="small mut"></span>
+      </div>
+      <div id="probeVerdict" class="small" style="padding:2px 0"></div>
+      <div class="dk" style="margin-top:10px"><svg class="ic"><use href="#i-broadcast"/></svg>POCSAG paging decode — bladeRF, built-in decoder (auto-baud)</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:2px 0">
+        <input id="pocFreq" value="460.6125" style="width:90px" title="frequency MHz">
+        <input id="pocSecs" value="15" style="width:46px" title="capture seconds">
+        <button id="pocGo" class="mbtn2">⌖ Decode POCSAG</button>
+        <span id="pocStat" class="small mut"></span>
+      </div>
+      <div id="pocMsgs" class="small mono" style="padding:2px 0;max-height:24vh;overflow:auto"></div>
+      <div id="unhWrap"><div class="dk" style="margin-top:10px"><svg class="ic"><use href="#i-list"/></svg>Unhandled / vendor control opcodes — what they decode to</div>
+        <div id="unh" class="small" style="padding:4px 0"></div></div>
+    </div>
+  </section>
+  <section class="panel" data-id="pager" data-view="pager">
+    <div class="phead" draggable="true"><div class="ttl"><svg class="ic grip"><use href="#i-grip"/></svg><svg class="ic"><use href="#i-broadcast"/></svg>Virtual Pager <span class="pill" id="pgrCount">0</span></div><span class="x" data-collapse>—</span></div>
+    <div class="pbody">
+      <div class="pgr-grid">
+        <div class="pgr-left">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:4px 0">
+            <button id="pgrToggle" class="mbtn2">▶ Enable pager</button>
+            <span id="pgrStatus" class="small mut"></span>
+            <label class="small" style="margin-left:auto;cursor:pointer;text-transform:none;letter-spacing:0" title="hide pages with no message, unless the capcode is monitored"><input type="checkbox" id="pgrNoTone" style="vertical-align:middle"> hide tone-only</label>
+            <label class="small" style="cursor:pointer;text-transform:none;letter-spacing:0"><input type="checkbox" id="pgrSound" checked style="vertical-align:middle"> sound</label>
+          </div>
+          <div class="small mut" style="padding:0 0 4px">Enabling <b style="color:#f0b429">pauses trunking</b>. Tip: capcode <b class="mono">697001</b> pages every minute — handy for testing.</div>
+          <div class="pager-dev">
+            <div class="pager-top"><span class="pager-brand">LOOKING&nbsp;GLASS&nbsp;PAGER</span><span class="pager-led" id="pgrLed"></span></div>
+            <div class="pager-lcd">
+              <div class="ph"><span id="pgrLcdFrom">— READY —</span><span id="pgrLcdTime"></span></div>
+              <div class="pb" id="pgrLcdBody">Enable the pager and add capcodes to watch.</div>
+            </div>
+            <div class="pager-btns">
+              <button id="pgrPrev" class="pgr-nav" title="older">◀</button>
+              <span id="pgrLcdIdx" class="small mut" style="min-width:64px;text-align:center"></span>
+              <button id="pgrNext" class="pgr-nav" title="newer">▶</button>
+              <button id="pgrTest" class="pgr-nav" title="test beep" style="margin-left:10px">🔊 test</button>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:2px 0">
+            <label class="small">Freq <input id="pgrFreq" value="460.6125" style="width:84px"></label>
+            <label class="small">Window <input id="pgrInt" value="12" style="width:40px">s</label>
+            <button id="pgrSaveCfg" class="mbtn2">save</button>
+          </div>
+          <div class="dk" style="margin-top:8px"><svg class="ic"><use href="#i-users"/></svg>Monitored capcodes</div>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:2px 0">
+            <input id="pgrCode" placeholder="capcode (RIC)" style="width:118px">
+            <input id="pgrLabel" placeholder="label (optional)" style="width:150px">
+            <button id="pgrAdd" class="mbtn2">+ add</button>
+          </div>
+          <div id="pgrList" class="small" style="padding:2px 0"></div>
+        </div>
+        <div class="pgr-right">
+          <div class="dk" style="margin-top:0"><svg class="ic"><use href="#i-list"/></svg>Decoded pages <span class="small mut" id="pgrSeen"></span></div>
+          <div id="pgrPages"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section class="panel" data-id="emulator" data-view="emulator">
+    <div class="phead" draggable="true"><div class="ttl"><svg class="ic grip"><use href="#i-grip"/></svg><svg class="ic"><use href="#i-tower"/></svg>P25 Site Emulator <span class="pill" id="emuState">idle</span></div><span class="x" data-collapse>—</span></div>
+    <div class="pbody">
+      <div class="emu-warn small">⚠ <b style="color:#ff6b6b">Transmit emits a live P25 control channel.</b> Faraday cage / dummy load ONLY — never over the air. Transmitting pauses P25/DMR trunking (the bladeRF does one job at a time). <b>Validate</b> is safe (no RF) — it decodes the generated CC through OP25 to show exactly what a receiver will see.</div>
+      <div class="pgr-grid">
+        <div class="pgr-left">
+          <div class="dk"><svg class="ic"><use href="#i-tower"/></svg>System parameters</div>
+          <div class="emu-form">
+            <label>NAC (hex)<input id="emuNac" placeholder="0x293"></label>
+            <label>WACN (hex)<input id="emuWacn" placeholder="0xBEE00"></label>
+            <label>System ID (hex)<input id="emuSys" placeholder="0x123"></label>
+            <label>RFSS<input id="emuRfss" placeholder="1"></label>
+            <label>Site<input id="emuSite" placeholder="1"></label>
+            <label>CC freq (MHz)<input id="emuCc" placeholder="851.0000"></label>
+            <label style="grid-column:1/3">Voice freqs (MHz, comma-sep)<input id="emuVc" placeholder="851.0125, 851.0250"></label>
+          </div>
+          <div class="dk" style="margin-top:10px"><svg class="ic"><use href="#i-gauge"/></svg>Band &amp; transmit (advanced)</div>
+          <div class="emu-form">
+            <label>Spacing (kHz)<input id="emuSpac" placeholder="12.5"></label>
+            <label>Bandwidth (kHz)<input id="emuBw" placeholder="12.5"></label>
+            <label>TX offset (MHz)<input id="emuToff" placeholder="-45"></label>
+            <label>TX sample rate<input id="emuRate" placeholder="1000000"></label>
+            <label style="grid-column:1/3">TX gains (osmosdr, blank=default)<input id="emuGains" placeholder="e.g. TX_VGA1:-4,TX_VGA2:0"></label>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+            <button id="emuSave" class="mbtn2">save</button>
+            <button id="emuValidate" class="mbtn2">✓ Validate (no RF)</button>
+            <button id="emuTx" class="mbtn2" style="background:rgba(240,77,79,.18);border-color:rgba(240,77,79,.5)">⏻ Transmit (cage)</button>
+          </div>
+          <div id="emuStatus" class="small mut" style="margin-top:8px"></div>
+        </div>
+        <div class="pgr-right">
+          <div class="dk"><svg class="ic"><use href="#i-signal"/></svg>What a P25 receiver decodes <span class="small mut">(validated through OP25, no RF)</span></div>
+          <div id="emuResult" class="emu-res small"><div class="mut" style="padding:8px 2px">Click “Validate (no RF)” — it builds the control channel and decodes it through a stock OP25 to confirm your NAC/WACN/System ID/RFSS/site/band plan before you transmit.</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section class="panel" data-id="scan" data-view="scanner">
+    <div class="phead" draggable="true"><div class="ttl"><svg class="ic grip"><use href="#i-grip"/></svg><svg class="ic"><use href="#i-broadcast"/></svg>System Scanner &nbsp;<span class="small" style="padding:0">discover &amp; ingest new P25 systems</span></div><span class="x" data-collapse>—</span></div>
+    <div class="pbody">
+      <div class="scanbar">
+        <span id="scanBands"></span>
+        <label title="P25: only P25/DMR-shaped carriers, identify systems. Discover: catch every carrier (analog, data, paging) and classify what it is."
+               style="margin-left:8px"><select id="scanMode" style="vertical-align:middle">
+          <option value="p25">P25/DMR systems</option>
+          <option value="discover">Discover · classify all</option>
+        </select></label>
+        <button id="scanGo" class="go">⌕ Scan</button>
+        <button id="scanPrev">◀ Prev sys</button>
+        <button id="scanNext">Next sys ▶</button>
+        <button id="scanStop" class="warn">Stop</button>
+      </div>
+      <div id="scanStatus" class="small">idle</div>
+      <div class="grid2" style="padding:10px 12px">
+        <div><div class="dk"><svg class="ic"><use href="#i-signal"/></svg>Candidates (carriers)</div><div id="scanCands" style="max-height:26vh;overflow:auto"></div></div>
+        <div><div class="dk"><svg class="ic"><use href="#i-tower"/></svg>Discovered systems</div><div id="scanFound" style="max-height:26vh;overflow:auto"></div></div>
+      </div>
+    </div>
+  </section>
+  <section class="panel" data-id="map" data-view="map">
+    <div class="phead" style="cursor:default"><div class="ttl"><svg class="ic"><use href="#i-map"/></svg>Radio Map — GPS / LRRP <span class="pill" id="mapCount">0</span></div>
+      <span style="margin-left:auto;display:flex;gap:6px;align-items:center">
+        <button id="mapFit" class="mbtn2">Fit</button>
+        <button id="mapAuto" class="mbtn2 on">auto-recenter</button>
+        <button id="mapDemo" class="mbtn2" title="simulate moving radios to preview the map">▶ Demo</button>
+      </span></div>
+    <div class="pbody" style="padding:0"><div id="lgmap" style="height:calc(100vh - 232px);width:100%;background:#0a0f17"></div></div>
+  </section>
+</main>
+
+<div class="modal-bg" id="radioModal"><div class="modal" id="radioModalCard"></div></div>
+
+<script>
+let FILTER='all', BUF=[], TAGMAP={}, activeCalls={}, WDIAG={}, openRid=null, _pinTimer=null, _pinBusy=false, CCONLY=false;
+const feed=document.getElementById('feed');
+const j=(u,b)=>fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json());
+
+function passes(ev){
+  if(FILTER==='all')return ev.kind!=='DATA';          // data-channel traffic only under the Data tab
+  if(FILTER==='grant')return ev.kind==='GRANT'||ev.kind==='CALLEND';
+  if(FILTER==='emergency')return !!ev.emergency;
+  if(FILTER==='secure')return !!ev.encrypted||ev.kind==='CRYPT';
+  if(FILTER==='affil')return ev.kind==='AFFIL';
+  if(FILTER==='reg')return ev.kind==='REG'||ev.kind==='DEREG'||ev.kind==='REGFAIL';
+  if(FILTER==='watch')return !!ev.watch;
+  if(FILTER==='data')return ev.kind==='DATA';
+  return true;
+}
+function evHtml(ev){
+  let main='';
+  const tg=ev.tg!=null?('TG '+ev.tg+(ev.tgtag?(' '+ev.tgtag):'')):'';
+  const rid=ev.rid?('RID '+ev.rid+(ev.ridalias?(' '+ev.ridalias):'')):'';
+  if(ev.kind==='GRANT')main=`${tg} ${rid} → ${ev.freq||''}`+(ev.emergency?'<span class="badge E">EMERG</span>':'')+(ev.encrypted?'<span class="badge S">SECURE</span>':'')+(ev.watch?'<span class="badge W">WATCH</span>':'');
+  else if(ev.kind==='CALLEND')main=`${tg} ${ev.freq||''} call ended`+(ev.n>1?` <span class="mut">· ~${ev.n}s</span>`:'');
+  else if(ev.kind==='AFFIL')main=`${rid} affiliate → ${tg}`+(ev.watch?'<span class="badge W">WATCH</span>':'');
+  else if(ev.kind==='REG')main=`${rid} ${ev.kind2} ${ev.granted?'granted':'DENIED'} ${tg}`+(ev.watch?'<span class="badge W">WATCH</span>':'');
+  else if(ev.kind==='DEREG')main=`${rid} de-registered`;
+  else if(ev.kind==='REGFAIL')main=`${rid} ${ev.kind2||'reg'} <b style="color:#ff4d4f">${(ev.reason||'denied').toUpperCase()}</b> ${tg}`+(ev.watch?'<span class="badge W">WATCH</span>':'');
+  else if(ev.kind==='CRYPT')main=`${tg} encrypted: ${ev.algid} key ${ev.keyid}`;
+  else if(ev.kind==='DATA')main=`${ev.dtype||'data'} ${ev.chan?('ch '+ev.chan):''} ${ev.freq?(ev.freq+' MHz'):''} ${ev.rid?('→ RID '+ev.rid+(ev.ridalias?(' '+ev.ridalias):'')):''}`;
+  return `<div class="row ${ev.kind}${ev.emergency?' em':''}${ev.encrypted?' enc':''}${ev.watch?' wa':''} mono">
+    <span class="t">${ev.ts||''}</span><span class="tag">${ev.kind}</span><span>${main}</span></div>`;
+}
+function ccHtml(r){return `<div class="row mono" style="grid-template-columns:60px 1fr"><span class="t">${r.ts}</span><span><b style="color:#67e8f9">${r.op}</b> <span style="color:#7d8aa0">${(r.text||'').replace(/</g,'&lt;')}</span></span></div>`;}
+function renderFeed(){
+  if(FILTER==='cc'){feed.innerHTML=(window._cc||[]).slice(-300).reverse().map(ccHtml).join('');return;}
+  feed.innerHTML=BUF.filter(passes).slice(-400).reverse().map(evHtml).join('');}
+function evKey(e){return [e.kind,e.tg,e.rid,e.freq,e.kind2].join('|');}
+function callKey(ev){return ev.tg+'|'+(ev.freq||'');}
+function hhmmss(){const d=new Date();return d.toTimeString().slice(0,8);}
+function addEvent(ev){
+  // Collapse repeated channel grants. A P25 control channel re-broadcasts the same
+  // voice grant ~once per second for the whole call, which floods the feed. Show only
+  // the START (first grant) here; renderActive() drops an END row when the call goes
+  // quiet. Every grant variant (grp_v_ch_grant / _up / _exp / TDMA) arrives as GRANT.
+  if(ev.kind==='GRANT'&&ev.tg!=null){
+    currentTG=ev.tg;updateNow();
+    const key=callKey(ev), c=activeCalls[key];
+    if(c){                                   // already-active call: refresh, don't re-post
+      c.ts=Date.now(); if(ev.rid)c.rid=ev.rid;
+      c.emergency=c.emergency||ev.emergency; c.encrypted=c.encrypted||ev.encrypted;
+      c.n=(c.n||1)+1; return;
+    }
+    activeCalls[key]={tg:ev.tg,rid:ev.rid,freq:ev.freq,emergency:ev.emergency,
+                      encrypted:ev.encrypted,ts:Date.now(),n:1};
+  }
+  const k=evKey(ev);
+  for(let i=BUF.length-1;i>=Math.max(0,BUF.length-8);i--){if(BUF[i].ts===ev.ts&&evKey(BUF[i])===k)return;}
+  BUF.push(ev); if(BUF.length>800)BUF.shift();
+  if(FILTER!=='cc'&&passes(ev))feed.insertAdjacentHTML('afterbegin',evHtml(ev));}
+
+function renderActive(){
+  const now=Date.now();
+  for(const k in activeCalls){
+    if(now-activeCalls[k].ts>6000){                         // no grant for 6s => call ended
+      const c=activeCalls[k]; delete activeCalls[k];
+      const end={kind:'CALLEND',tg:c.tg,rid:c.rid,freq:c.freq,emergency:c.emergency,
+                 encrypted:c.encrypted,n:c.n,ts:hhmmss(),tgtag:TAGMAP[c.tg]||''};
+      BUF.push(end); if(BUF.length>800)BUF.shift();
+      if(FILTER!=='cc'&&passes(end))feed.insertAdjacentHTML('afterbegin',evHtml(end));
+    }
+  }
+  const list=Object.values(activeCalls).sort((a,b)=>b.ts-a.ts);
+  document.getElementById('callCount').textContent=list.length;
+  document.getElementById('activeCalls').innerHTML=list.map(c=>{
+    const name=TAGMAP[c.tg]?TAGMAP[c.tg]:('TG '+c.tg);
+    const cls='call'+(c.emergency?' em':'')+(c.encrypted?' enc':'');
+    const badges=(c.emergency?'<span class="badge E">EMERG</span>':'')+(c.encrypted?'<span class="badge S">SECURE</span>':'');
+    return `<div class="${cls}" data-tg="${c.tg}" style="cursor:pointer" title="click to focus audio on this call"><div class="ct">${name}</div><div class="cm">${c.freq||''}${c.rid?(' · '+c.rid):''}</div><div class="cb">${badges||'<span class="pill">voice</span>'}</div></div>`;
+  }).join('')||'<div class="small">no active calls</div>';
+  renderMixer();
+}
+setInterval(renderActive,1000);
+
+function renderDiag(s){
+  const freqs=new Set(); BUF.forEach(e=>{if(e.kind==='GRANT'&&e.freq)freqs.add(e.freq);});
+  const active=Object.keys(activeCalls).length, seen=freqs.size||1;
+  const pct=Math.min(100,Math.round(active/Math.max(seen,1)*100));
+  document.getElementById('dgUtil').innerHTML=
+    `<div class="dl"><span class="mut">active now</span><b>${active}</b></div>`+
+    `<div class="dl"><span class="mut">voice channels seen</span><b>${freqs.size}</b></div>`+
+    `<div class="meter${pct>80?' warn':''}"><i style="width:${pct}%"></i></div>`+
+    `<div class="dl"><span class="mut">total grants</span><b>${s.counters.grants}</b></div>`;
+  const sq=s.sigqual||[];
+  document.getElementById('dgBer').innerHTML=sq.length?sq.slice(0,7).map(q=>{
+    const cls=q.ber===0?'ber-ok':(q.ber<=2?'ber-warn':'ber-bad');
+    const nm='RID '+q.rid+(q.alias?(' '+q.alias):'');
+    // flag subscribers the tower has struggled with: peaked-rough BER or a weak RF floor
+    const trouble=((q.ber_max||0)>2)||((q.rf_min!=null)&&q.rf_min<=4);
+    const warn=trouble?` <span title="worst BER ${q.ber_max??'?'} · weakest RF ${q.rf_min??'?'}" style="color:#f0b429">⚠</span>`:'';
+    return `<div class="dl"><span class="mono" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:155px">${nm}${warn}</span><b class="${cls}">BER ${q.ber} · RF ${q.rf}</b></div>`;
+  }).join(''):'<div class="mut" style="font-size:11px">no inbound sig-quality reports yet — appears as radios transmit (uplink power control)</div>';
+  renderCal(s);
+  const top=s.talkgroups.slice(0,5); const mx=Math.max(1,...top.map(t=>t.count));
+  document.getElementById('dgCalls').innerHTML=top.map(t=>{
+    const nm=t.tag||('TG '+t.tgid); const p=Math.round(t.count/mx*100);
+    return `<div class="dl"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px">${nm}</span><b>${t.count}</b></div><div class="meter"><i style="width:${p}%"></i></div>`;
+  }).join('')||'<div class="mut">—</div>';
+  const enc=s.counters.grants?Math.round(s.counters.encrypted/Math.max(s.counters.grants,1)*100):0;
+  const hi=(ok)=>`<span style="color:${ok?'#36d399':'#ff4d4f'}">●</span>`;
+  document.getElementById('dgHealth').innerHTML=
+    `<div class="dl"><span>${hi(s.op25.running)} OP25 receiver</span><b>${s.op25.running?'up':'down'}</b></div>`+
+    `<div class="dl"><span>${hi(!!s.system.nac)} CC sync</span><b class="mono">${s.system.nac||'—'}</b></div>`+
+    `<div class="dl"><span class="mut">adjacent sites</span><b>${Object.keys(s.adjacent).length}</b></div>`+
+    `<div class="dl"><span class="mut">encrypted traffic</span><b>${enc}%</b></div>`+
+    `<div class="dl"><span class="mut">affiliations</span><b>${s.counters.affiliations}</b></div>`;
+}
+
+function renderCal(s){
+  const el=document.getElementById('dgCal'); if(!el)return;
+  const d=s.diag||{}, cal=d.cal||{}, sg=(x)=>(x>0?'+':'')+x;
+  const bestStr=cal.best?(sg(cal.best[1])+' Hz @ '+cal.best[0]+' ppm'):'—';
+  if(cal.running){                                  // auto-cal in progress (OP25 may bounce between retunes)
+    el.innerHTML=
+      `<div class="dl"><span class="mut">auto-cal</span><b style="color:#f0b429">running…</b></div>`+
+      `<div class="dl"><span class="mut">phase</span><b class="mono" style="font-size:11px">${cal.phase||''}</b></div>`+
+      `<div class="dl"><span class="mut">best so far</span><b class="mono" style="font-size:11px">${bestStr}</b></div>`+
+      `<div class="mut" style="font-size:10px;margin-top:4px">measure → nudge → learn direction → step to null, iterating. ~30–90s; trunking resumes after.</div>`;
+    return;
+  }
+  if(!s.op25.running){el.innerHTML='<div class="mut" style="font-size:11px">receiver stopped</div>';return;}
+  if(d.error_hz==null){el.innerHTML='<div class="mut" style="font-size:11px">waiting for CC lock… the GPS-disciplined control channel is the frequency reference</div>';return;}
+  const m=(d.median_hz!=null)?d.median_hz:d.error_hz, ae=Math.abs(m);
+  const cls=ae<=50?'ber-ok':(ae<=200?'ber-warn':'ber-bad');
+  const sug=d.suggested_ppm;
+  const res=(cal.result)?(cal.result.reverted
+    ? `<div style="font-size:10px;margin-top:4px;color:#f0b429">⚠ reverted: ${cal.result.rejected} ppm broke decode — kept ${cal.result.ppm} ppm</div>`
+    : `<div class="mut" style="font-size:10px;margin-top:4px">last cal settled at ${sg(cal.result.err)} Hz @ ${cal.result.ppm} ppm</div>`):'';
+  el.innerHTML=
+    `<div class="dl"><span class="mut">tuning error</span><b class="${cls}">${sg(d.error_hz)} Hz</b></div>`+
+    `<div class="dl"><span class="mut">median (${d.n||0})</span><b class="mono">${d.median_hz==null?'—':sg(d.median_hz)+' Hz'}</b></div>`+
+    `<div class="dl"><span class="mut">current ppm</span><b class="mono">${d.ppm==null?'—':d.ppm}</b></div>`+
+    `<button id="calAuto" class="mbtn2" style="margin-top:6px;width:100%">⌖ Auto-calibrate to CC</button>`+
+    `<div style="margin-top:4px;font-size:10px"><a id="calOnce" href="#" class="mut">nudge once${sug==null?'':(' → '+sug+' ppm')}</a></div>`+res;
+  const ab=document.getElementById('calAuto');
+  if(ab)ab.onclick=async()=>{ab.disabled=true;ab.textContent='starting…';try{await j('/api/calibrate/auto',{});}catch(e){}setTimeout(refresh,1500);};
+  const ob=document.getElementById('calOnce');
+  if(ob)ob.onclick=async(e)=>{e.preventDefault();if(sug==null)return;ob.textContent='re-tuning…';try{await j('/api/calibrate',{});}catch(x){}setTimeout(refresh,2800);};
+}
+
+function renderData(s){
+  const dc=s.datachans||[]; const cnt=document.getElementById('dcCount'); if(cnt)cnt.textContent=dc.length;
+  const t=document.getElementById('dchans'); if(!t)return;
+  t.innerHTML='<thead><tr><th>Chan</th><th>Freq (MHz)</th><th>Type</th><th class="num">Grants</th><th class="num">Pages</th><th>Last target</th><th>Last</th></tr></thead><tbody>'+
+    (dc.length?dc.map(d=>`<tr><td class="mono">${d.chan}</td><td class="mono">${d.freq||'—'}</td><td>SNDCP data</td><td class="num">${d.grants}</td><td class="num">${d.pages}</td><td class="mono">${d.last_target||'—'}</td><td class="mono">${fmtLast(d.last)}</td></tr>`).join('')
+      :'<tr><td colspan="7" class="mut" style="padding:8px 4px">no data channels announced yet</td></tr>')+'</tbody>';
+  const ds=s.datastats||{}, uh=s.unhandled||[];
+  document.getElementById('unh').innerHTML=
+    `<div class="dl"><span class="mut">SNDCP data grants / pages observed</span><b>${ds.grants||0} / ${ds.pages||0}</b></div>`+
+    ((ds.pdus)?`<div class="dl"><span class="mut">packet PDUs (clear / encrypted)</span><b>${ds.pdus} (${ds.pdu_clear||0} / ${ds.pdu_enc||0})</b></div>`:'')+
+    (uh.map(u=>`<div class="dl"><span class="mono" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px"><b style="color:#67e8f9">${u.op}</b>${u.mfid&&u.mfid!=='0x00'?(' <span style="color:#f59e0b">mf'+u.mfid+'</span>'):''} <span class="mut">${u.name}</span></span><b>${u.count}</b></div>`).join('')||'<div class="mut">none</div>');
+  const pv=document.getElementById('probeVerdict'); if(pv&&!pv.innerHTML&&s.probe&&s.probe.result&&!s.probe.running)pv.innerHTML=probeVerdictHtml(s.probe.result);
+  const ps=document.getElementById('probeStat'); if(ps&&s.probe&&s.probe.running)ps.textContent='probing '+(s.probe.freq||'')+' MHz…';
+}
+document.getElementById('dcShow').onchange=e=>{document.getElementById('unhWrap').style.display=e.target.checked?'':'none';};
+function probeVerdictHtml(r){
+  if(!r)return '';
+  const v=r.verdict;
+  if(v==='gps')return `<span style="color:#36d399">✅ CLEAR GPS FOUND — ${r.gps_fixes} LRRP fix(es) on ${r.freq} MHz, plotted on the Map. The full decoder is worth building.</span>`;
+  if(v==='clear')return `<span style="color:#36d399">☑ Clear IPv4/UDP packet data present (${r.clear} PDUs) but no LRRP yet — GPS decode is feasible; probe longer or another channel.</span>`;
+  if(v==='encrypted')return `<span style="color:#f59e0b">🔒 ${r.encrypted} data payload PDU(s) seen but none are clear IPv4/UDP — the data is encrypted; LRRP GPS isn't recoverable on ${r.freq} MHz.</span>`;
+  if(v==='signaling')return `<span style="color:#9fb0c9">📨 ${r.pdus} data-channel signaling PDU(s) seen but no data payloads (${r.payload||0}) during the window — quiet/bursty period. Re-probe during heavy data activity to judge clear-vs-encrypted.</span>`;
+  if(v==='idle')return `<span class="mut">— No packet data captured on ${r.freq} MHz during the probe (channel idle). Try again when it's busier.</span>`;
+  if(v==='error')return `<span style="color:#ff4d4f">probe error</span>`;
+  return `<span class="mut">probe finished — inconclusive (${r.pdus||0} PDUs).</span>`;
+}
+function onProbe(ev){
+  const st=document.getElementById('probeStat'), v=document.getElementById('probeVerdict'), btn=document.getElementById('probeData');
+  if(!st)return;
+  if(ev.phase==='start'){if(btn)btn.disabled=true;st.textContent='tuning '+ev.freq+' MHz…';if(v)v.innerHTML='';}
+  else if(ev.phase==='run'){st.textContent=`probing ${ev.freq} MHz · ${ev.elapsed}s · PDUs ${ev.pdus} (clear ${ev.clear} / enc ${ev.enc})`+(ev.gps?` · GPS ${ev.gps}!`:'');}
+  else if(ev.phase==='done'){if(btn)btn.disabled=false;st.textContent='done — '+(ev.pdus||0)+' PDUs';if(v)v.innerHTML=probeVerdictHtml(ev);}
+}
+{const _pb=document.getElementById('probeData'); if(_pb)_pb.onclick=async function(){
+  if(!confirm('This briefly retunes the bladeRF off the control channel (~75s) onto the busiest data channel to check whether its packet payload is clear or encrypted. Trunking resumes automatically after. Continue?'))return;
+  this.disabled=true; const st=document.getElementById('probeStat'); if(st)st.textContent='starting…';
+  const r=await j('/api/probe/data',{});
+  if(!r.ok){this.disabled=false; if(st)st.textContent='error: '+(r.err||'');}
+};}
+{const _pg=document.getElementById('pocGo'); if(_pg)_pg.onclick=async function(){
+  const freq=parseFloat(document.getElementById('pocFreq').value)||460.6125;
+  const secs=parseInt(document.getElementById('pocSecs').value)||15;
+  const st=document.getElementById('pocStat'); const out=document.getElementById('pocMsgs');
+  this.disabled=true; st.textContent='retuning bladeRF + capturing '+secs+'s…';
+  let r; try{r=await j('/api/pocsag',{freq,secs});}catch(e){r={ok:false,err:'request failed'};}
+  if(!r.ok){st.textContent='error: '+(r.err||''); this.disabled=false; return;}
+  const btn=this;
+  const poll=setInterval(async()=>{
+    let s; try{s=await (await fetch('/api/pocsag/status')).json();}catch(e){return;}
+    if(s.running){st.textContent='decoding… ('+s.secs+'s capture on '+s.freq+' MHz)';return;}
+    clearInterval(poll); btn.disabled=false;
+    const res=s.result||{}; const msgs=res.msgs||[];
+    st.textContent=(res.ts?('done '+res.ts+' — '):'')+msgs.length+' page(s)'+(res.detail&&!msgs.length?(' ('+res.detail+')'):'');
+    out.innerHTML=msgs.length?msgs.map(m=>'<div class="dl">'+m.replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</div>').join(''):'<div class="mut">no pages decoded in that window — try a longer capture on a busy channel</div>';
+  },1500);
+};}
+// ---- Virtual pager ----
+const PGR={capcodes:[],alerts:[],idx:0,lastSeq:-1,on:false,loaded:false,ac:null,lastPage:null,ledT:null};
+function pgrAudio(){            // one AudioContext, resumed on a user gesture (autoplay policy)
+  try{if(!PGR.ac)PGR.ac=new (window.AudioContext||window.webkitAudioContext)();
+      if(PGR.ac.state==='suspended')PGR.ac.resume();}catch(e){}
+  return PGR.ac;
+}
+function pgrBeep(){
+  const cb=document.getElementById('pgrSound'); if(cb&&!cb.checked)return;
+  const ac=pgrAudio(); if(!ac)return;
+  try{const o=ac.createOscillator(),g=ac.createGain();o.type='square';o.connect(g);g.connect(ac.destination);
+    o.frequency.value=1040;let t=ac.currentTime;
+    for(let i=0;i<3;i++){g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(0.28,t+0.02);g.gain.exponentialRampToValueAtTime(0.0001,t+0.16);t+=0.22;}
+    o.start();o.stop(t);}catch(e){}
+}
+function pgrEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');}
+function pgrRenderCaps(){
+  document.getElementById('pgrCount').textContent=PGR.capcodes.length;
+  document.getElementById('pgrList').innerHTML=PGR.capcodes.length?PGR.capcodes.map((c,i)=>
+    `<span class="wchip" style="display:inline-flex;gap:6px;align-items:center;margin:2px;padding:2px 8px"><b class="mono">${c.code}</b>${c.label?('<span>'+pgrEsc(c.label)+'</span>'):''}<a href="#" data-del="${i}" style="color:#ff6b6b;text-decoration:none">✕</a></span>`
+  ).join(''):'<span class="mut">no capcodes — add one above to get alerts</span>';
+  document.querySelectorAll('#pgrList a[data-del]').forEach(a=>a.onclick=async e=>{e.preventDefault();PGR.capcodes.splice(+a.dataset.del,1);pgrRenderCaps();await pgrSaveCfg();});
+}
+async function pgrSaveCfg(){
+  const freq=parseFloat(document.getElementById('pgrFreq').value)||460.6125;
+  const interval=parseInt(document.getElementById('pgrInt').value)||12;
+  try{await j('/api/pager/config',{freq,interval,capcodes:PGR.capcodes});}catch(e){}
+}
+function pgrRenderDevice(){     // drive the LCD from the selected alert (or status)
+  const a=PGR.alerts, from=document.getElementById('pgrLcdFrom'), tm=document.getElementById('pgrLcdTime'),
+        body=document.getElementById('pgrLcdBody'), idxEl=document.getElementById('pgrLcdIdx');
+  if(a.length){
+    if(PGR.idx>=a.length)PGR.idx=a.length-1; if(PGR.idx<0)PGR.idx=0;
+    const m=a[PGR.idx];
+    from.textContent=m.label?m.label:('CAPCODE '+m.code);
+    tm.textContent=m.ts||'';
+    body.textContent=(m.type==='tone'?'◉ TONE PAGE':(m.content||'(empty)'));
+    idxEl.textContent=(PGR.idx+1)+' / '+a.length;
+  }else{
+    from.textContent='— '+(PGR.on?'MONITORING':'READY')+' —'; tm.textContent=''; idxEl.textContent='';
+    body.textContent=PGR.on?(PGR.lastPage?('listening… last on-air page:\n'+(PGR.lastPage.type==='tone'?'TONE':PGR.lastPage.content)):'Listening for your capcodes…')
+                           :'Enable the pager and add capcodes to watch.';
+  }
+}
+async function pgrPoll(){
+  let d; try{d=await (await fetch('/api/pager')).json();}catch(e){return;}
+  PGR.on=d.enabled;
+  const tg=document.getElementById('pgrToggle'); if(tg){tg.textContent=d.enabled?'■ Disable pager':'▶ Enable pager';tg.classList.toggle('on',d.enabled);}
+  const stx=document.getElementById('pgrStatus'); if(stx)stx.textContent=d.status||'';
+  const led=document.getElementById('pgrLed');
+  if(document.activeElement.id!=='pgrFreq')document.getElementById('pgrFreq').value=d.freq;
+  if(document.activeElement.id!=='pgrInt')document.getElementById('pgrInt').value=d.interval;
+  if(!PGR.loaded){PGR.capcodes=d.capcodes||[];pgrRenderCaps();PGR.loaded=true;}   // server authoritative only on first load
+  PGR.alerts=d.alerts||[];
+  PGR.lastPage=(d.pages&&d.pages[0])||PGR.lastPage;
+  document.getElementById('pgrSeen').textContent=d.seen?('· '+d.seen+' seen'+(d.last?(' · last '+d.last):'')):'';
+  const fresh=(PGR.lastSeq>=0 && d.alert_seq>PGR.lastSeq);
+  if(fresh){PGR.idx=0; pgrBeep(); if(led){led.className='pager-led alert'; clearTimeout(PGR.ledT); PGR.ledT=setTimeout(()=>{led.className='pager-led'+(PGR.on?' on':'');},4500);}}
+  else if(led && !led.classList.contains('alert')){led.className='pager-led'+(d.enabled?' on':'');}
+  PGR.lastSeq=d.alert_seq;
+  pgrRenderDevice();
+  const codeSet=new Set(PGR.capcodes.map(c=>c.code));
+  const noTone=document.getElementById('pgrNoTone').checked;
+  const pg=(d.pages||[]).filter(p=>!(noTone&&p.type==='tone'&&!codeSet.has(p.code)));   // monitored capcodes always show
+  document.getElementById('pgrPages').innerHTML=pg.length?pg.map(p=>{
+    const match=codeSet.has(p.code);
+    const meta=`<span>${p.ts}</span><span class="mono" style="color:#67e8f9">CAP ${p.code}</span><span>${p.type||''}${p.baud?(' · '+p.baud+'bd'):''}${p.function!=null?(' · F'+p.function):''}</span>`;
+    const txt=p.type==='tone'?'<span class="mut">[tone-only page]</span>':(pgrEsc(p.content)||'<span class="mut">(empty)</span>');
+    return `<div class="pgr-page${match?' match':''}"><div class="ph">${meta}</div><div class="pt">${txt}</div></div>`;
+  }).join(''):'<div class="mut" style="padding:8px 2px">no pages decoded yet'+(d.enabled?' — listening…':' — enable the pager')+'</div>';
+}
+{
+  const add=document.getElementById('pgrAdd');
+  const addCap=async()=>{const code=parseInt(document.getElementById('pgrCode').value);if(!code)return;
+    const label=document.getElementById('pgrLabel').value.trim();
+    if(!PGR.capcodes.some(c=>c.code===code))PGR.capcodes.push({code,label});
+    document.getElementById('pgrCode').value='';document.getElementById('pgrLabel').value='';
+    pgrRenderCaps();await pgrSaveCfg();};
+  if(add)add.onclick=addCap;
+  const ci=document.getElementById('pgrCode'); if(ci)ci.onkeydown=e=>{if(e.key==='Enter')addCap();};
+  const tg=document.getElementById('pgrToggle');
+  if(tg)tg.onclick=async function(){pgrAudio();this.disabled=true;const stx=document.getElementById('pgrStatus');
+    try{const r=await j('/api/pager/enable',{on:!PGR.on});if(!r.ok&&stx)stx.textContent='error: '+(r.err||'');}catch(e){}
+    setTimeout(()=>{this.disabled=false;pgrPoll();},900);};
+  const sv=document.getElementById('pgrSaveCfg'); if(sv)sv.onclick=()=>pgrSaveCfg();
+  const pv=document.getElementById('pgrPrev'); if(pv)pv.onclick=()=>{if(PGR.idx<PGR.alerts.length-1){PGR.idx++;pgrRenderDevice();}};
+  const nx=document.getElementById('pgrNext'); if(nx)nx.onclick=()=>{if(PGR.idx>0){PGR.idx--;pgrRenderDevice();}};
+  const ts=document.getElementById('pgrTest'); if(ts)ts.onclick=()=>{pgrAudio();pgrBeep();};
+  const nt=document.getElementById('pgrNoTone');
+  try{nt.checked=localStorage.getItem('lg_pgr_notone')==='1';}catch(e){}
+  nt.onchange=()=>{try{localStorage.setItem('lg_pgr_notone',nt.checked?'1':'0');}catch(e){} pgrPoll();};
+  pgrPoll(); setInterval(pgrPoll,3500);
+}
+// ---- P25 site emulator ----
+const EMU={tx:false,validating:false,_loaded:false};
+const emuHex=v=>'0x'+(Number(v)||0).toString(16);
+const emuParseHex=s=>parseInt(String(s||'').replace(/^0x/i,'').trim()||'0',16)||0;
+function emuFill(d){
+  const c=d.config||{};
+  const set=(id,v)=>{const e=document.getElementById(id); if(e&&document.activeElement!==e)e.value=v;};
+  set('emuNac',emuHex(c.nac)); set('emuWacn',emuHex(c.wacn)); set('emuSys',emuHex(c.system_id));
+  set('emuRfss',c.rfss); set('emuSite',c.site_id);
+  set('emuCc',((c.cc_freq||0)/1e6).toFixed(5));
+  set('emuVc',(c.vc_freqs||[]).map(f=>(f/1e6).toFixed(5)).join(', '));
+  set('emuSpac',(c.spacing_hz||12500)/1000); set('emuBw',(c.bw_hz||12500)/1000);
+  set('emuToff',(c.tx_offset_hz||0)/1e6); set('emuRate',d.tx_if_rate||1000000); set('emuGains',d.tx_gains||'');
+}
+function emuReadConfig(){
+  const num=id=>parseFloat(document.getElementById(id).value);
+  const vc=document.getElementById('emuVc').value.split(',').map(x=>x.trim()).filter(Boolean).map(x=>Math.round(parseFloat(x)*1e6));
+  return {nac:emuParseHex(document.getElementById('emuNac').value),
+    wacn:emuParseHex(document.getElementById('emuWacn').value),
+    system_id:emuParseHex(document.getElementById('emuSys').value),
+    rfss:Math.round(num('emuRfss'))||0, site_id:Math.round(num('emuSite'))||0,
+    cc_freq:Math.round(num('emuCc')*1e6)||0, vc_freqs:vc,
+    spacing_hz:Math.round(num('emuSpac')*1000)||12500, bw_hz:Math.round(num('emuBw')*1000)||12500,
+    tx_offset_hz:Math.round(num('emuToff')*1e6)||0, tx_if_rate:Math.round(num('emuRate'))||1000000,
+    tx_gains:document.getElementById('emuGains').value.trim()};
+}
+async function emuSave(){try{await j('/api/emulator/config',emuReadConfig());}catch(e){}}
+function emuRenderResult(r){
+  const el=document.getElementById('emuResult'); if(!el)return;
+  if(!r)return;
+  if(r.error){el.innerHTML='<div style="color:#ff4d4f;padding:6px 2px">error: '+pgrEsc(r.error)+'</div>';return;}
+  const row=(k,v,ok)=>`<div class="dl"><span class="mut">${k}</span><b class="mono"${ok===false?' style="color:#ff4d4f"':(ok?' style="color:#36d399"':'')}>${pgrEsc(v)}</b></div>`;
+  el.innerHTML=
+    row('decoded', r.decoded?'YES — OP25 read it back':'NO — check config', !!r.decoded)+
+    (r.sync?row('demod sync','established (P25P1)',true):'')+
+    row('NAC', r.nac?('0x'+r.nac):'—')+ row('WACN', r.wacn?('0x'+r.wacn):'—')+
+    row('System ID', r.system_id?('0x'+r.system_id):'—')+
+    row('RFSS / Site', (r.rfss!=null?r.rfss:'—')+' / '+(r.site_id!=null?r.site_id:'—'))+
+    row('iden_up freq', r.iden_freq?(r.iden_freq+' MHz'):'—')+
+    (r.ts?`<div class="mut" style="font-size:10px;margin-top:4px">validated ${r.ts}</div>`:'');
+}
+async function emuPoll(){
+  let d; try{d=await(await fetch('/api/emulator')).json();}catch(e){return;}
+  const stx=document.getElementById('emuStatus');
+  if(!d.available){if(stx)stx.textContent='emulator module not available on the backend';
+    const t=document.querySelector('.vtab[data-view="emulator"]');if(t)t.style.display='none';return;}   // RX-only builds ship without emulator/
+  EMU.tx=d.tx; EMU.validating=d.validating;
+  const st=document.getElementById('emuState'); if(st){st.textContent=d.tx?'TRANSMITTING':(d.validating?'validating…':'idle');st.style.color=d.tx?'#ff6b6b':'';}
+  if(stx)stx.textContent=d.status||'';
+  const tb=document.getElementById('emuTx'); if(tb)tb.textContent=d.tx?'■ Stop transmit':'⏻ Transmit (cage)';
+  const vb=document.getElementById('emuValidate'); if(vb)vb.disabled=d.validating;
+  if(!EMU._loaded){emuFill(d);EMU._loaded=true;}
+  emuRenderResult(d.result);
+}
+{
+  const sv=document.getElementById('emuSave'); if(sv)sv.onclick=async()=>{await emuSave();const s=document.getElementById('emuStatus');if(s)s.textContent='saved';};
+  const vb=document.getElementById('emuValidate');
+  if(vb)vb.onclick=async function(){await emuSave();this.disabled=true;const s=document.getElementById('emuStatus');if(s)s.textContent='building CC + decoding through OP25 (no RF)… ~15s';
+    try{const r=await j('/api/emulator/validate',{});if(!r.ok&&s)s.textContent='error: '+(r.err||'');}catch(e){}};
+  const tb=document.getElementById('emuTx');
+  if(tb)tb.onclick=async function(){const s=document.getElementById('emuStatus');
+    if(!EMU.tx){
+      if(!confirm('TRANSMIT a live P25 control channel on the bladeRF?\n\nFaraday cage / dummy load ONLY — over-the-air transmission is illegal and can interfere with public-safety systems.\n\nThis pauses P25/DMR trunking. Continue?'))return;
+      await emuSave();
+      try{const r=await j('/api/emulator/tx',{on:true,confirm_cage:true});if(!r.ok&&s)s.textContent='error: '+(r.err||'');}catch(e){}
+    }else{try{await j('/api/emulator/tx',{on:false});}catch(e){}}
+    setTimeout(emuPoll,1000);
+  };
+  emuPoll(); setInterval(emuPoll,3000);
+}
+document.getElementById('tabs').onclick=e=>{if(e.target.dataset.f){FILTER=e.target.dataset.f;
+  [...document.querySelectorAll('#tabs button')].forEach(b=>b.classList.toggle('active',b===e.target));renderFeed();}};
+
+// uConsole hardware buttons (labwc keybind -> co-lg-cmd -> /api/uicmd -> here)
+function onUiCmd(c){const id={uc:'ucBtn',audio:'audioBtn',boost:'boostBtn',cc:'ccData'}[c];const b=id&&document.getElementById(id);if(b)b.click();}
+const es=new EventSource('/stream');
+es.onmessage=e=>{try{const ev=JSON.parse(e.data);if(ev.kind==='POSITION'){onPosition(ev);}else if(ev.kind==='PROBE'){onProbe(ev);}else if(ev.kind==='UICMD'){onUiCmd(ev.cmd);}else{addEvent(ev);}}catch(x){}};
+es.onopen=()=>document.getElementById('live').classList.add('on');
+es.onerror=()=>document.getElementById('live').classList.remove('on');
+
+function fmtLast(s){return s? s.split(' ').pop().split('.')[0]:'';}
+async function postTag(type,id,name){await j('/api/tag',{type,id,name});}
+function editable(type,id,val){const inp=document.createElement('input');inp.className='edit';inp.value=val||'';inp.placeholder='label…';
+  inp.onkeydown=e=>{if(e.key==='Enter')inp.blur();};inp.onblur=async()=>{await postTag(type,id,inp.value);refresh();};
+  const td=document.createElement('td');td.appendChild(inp);return td;}
+function cell(html,cls){const td=document.createElement('td');if(cls)td.className=cls;td.innerHTML=html;return td;}
+
+async function refresh(){
+  const s=await (await fetch('/api/state')).json();
+  TAGMAP={}; s.talkgroups.forEach(t=>{if(t.tag)TAGMAP[t.tgid]=t.tag;});
+  if(!_pinTimer&&!_pinBusy) monitored=s.listen||[];   // don't clobber optimistic pin edits mid-retune
+  updateNow();
+  chantg=s.chantg||{}; renderMixer();
+  window._cc=s.cc||[]; window._op=s.opcodes||{}; if(FILTER==='cc')renderFeed();
+  const y=s.system;
+  document.getElementById('sys').innerHTML=`NAC <b>${y.nac||'—'}</b> · WACN <b>${y.wacn||'—'}</b> · SYSID <b>${y.sysid??'—'}</b> · RFSS <b>${y.rfss??'—'}</b> · Site <b>${y.site??'—'}</b> · CC <b>${y.cc||'—'}</b>`;
+  const c=s.counters;
+  document.getElementById('stats').innerHTML=[['c','Grants',c.grants,'i-zap'],['e','Emergency',c.emergencies,'i-alert'],['s','Secure',c.encrypted,'i-shield'],['a','Affil',c.affiliations,'i-users'],['r','Reg',c.registrations,'i-usercheck'],['t','TSBK',c.tsbks,'i-list'],['g','Active',Object.keys(activeCalls).length,'i-radio']]
+    .map(([cl,k,v,ico])=>`<div class="stat ${cl}"><svg class="ic ico"><use href="#${ico}"/></svg><div class="v">${v}</div><div class="k">${k}</div></div>`).join('');
+  renderDiag(s);
+  renderData(s);
+  const sel=document.getElementById('sysSel');
+  if(sel.dataset.n!=Object.keys(s.systems).length){const cur=sel.value;sel.innerHTML=Object.entries(s.systems).map(([k,v])=>`<option value="${k}">${v.name} (${v.county||''})</option>`).join('');sel.dataset.n=Object.keys(s.systems).length;if(cur)sel.value=cur;}
+  // don't snap the dropdown back to the active system while the user is picking one to switch to
+  if(sel.dataset.dirty!=='1'&&document.activeElement!==sel)sel.value=s.active;
+  sel.dataset.active=s.active;
+  document.getElementById('op25').innerHTML=s.op25.running?'<span style="color:#36d399">● running</span>':('<span style="color:#ff4d4f">● stopped</span>'+(s.op25.error?(' '+s.op25.error):''));
+  wbBtn.textContent='wideband: '+((s.sdr&&s.sdr.wideband)?'on':'off'); wbBtn.classList.toggle('on',!!(s.sdr&&s.sdr.wideband));
+  ccBtn.textContent='CC-only: '+(s.cc_only?'on':'off'); ccBtn.classList.toggle('on',!!s.cc_only);
+  CCONLY=!!s.cc_only;
+  const ccd=document.getElementById('ccData'); if(ccd){ccd.innerHTML=(s.cc_only?'📡 CC-only: ON':'📡 CC-only: off');ccd.classList.toggle('on',!!s.cc_only);}
+  if(document.activeElement.id?.indexOf('sdr')!==0){const d=s.sdr||{};
+    sdrGains.value=d.gains||'';sdrOffset.value=d.offset??'';sdrPpm.value=d.ppm??'';sdrRate.value=d.rate??'';sdrArgs.value=d.args||'';}
+  const ops=Object.entries(window._op||{}).slice(0,16).map(([k,v])=>(k.split(') ').pop())+' '+v).join(' · ');
+  document.getElementById('disco').innerHTML=`Secondary CC: <b>${(y.secondary_cc||[]).join(', ')||'—'}</b> &nbsp; Last: ${fmtLast(y.last_update)}<br><span style="color:#7d8aa0">CC opcodes: ${ops||'—'}</span>`;
+  const adj=document.getElementById('adj');
+  adj.innerHTML='<thead><tr><th>RFSS-Site</th><th>Freq</th></tr></thead><tbody>'+Object.values(s.adjacent).map(a=>`<tr><td>${a.rfid}-${a.stid}</td><td class="mono">${a.freq}</td></tr>`).join('')+'</tbody>';
+  const band=document.getElementById('band');
+  band.innerHTML='<thead><tr><th>ID</th><th>Base</th><th>Spac</th><th>Type</th></tr></thead><tbody>'+Object.entries(s.bandplan).map(([id,b])=>`<tr><td>${id}</td><td class="mono">${b.base}</td><td>${b.spacing}</td><td>${b.type}${b.slots?('/'+b.slots):''}</td></tr>`).join('')+'</tbody>';
+  const tb=document.querySelector('#tgs tbody');tb.innerHTML='';
+  s.talkgroups.forEach(t=>{const tr=document.createElement('tr');const mode=(t.emergency?'<span class="em-pill">EMERG</span> ':'')+(t.encrypted?('<span class="s-pill">'+(t.algid||'SEC')+'</span>'):'');
+    const mon=monitored.includes(t.tgid);
+    const idtd=cell('','mono');idtd.innerHTML=`<span class="tgpin${mon?' on':''}" title="${mon?'pinned — receiver locked on this TG (click to unpin)':'click to pin & lock the receiver on this TG'}">${mon?'📌':'📍'}</span> ${t.tgid}`;
+    idtd.querySelector('.tgpin').onclick=()=>{ensureAudioCtx();togglePin(t.tgid);};
+    tr.appendChild(idtd);tr.appendChild(editable('tg',t.tgid,t.tag));tr.appendChild(cell((t.last_rid||'')+'','mono'));tr.appendChild(cell(mode));tr.appendChild(cell(String(t.count),'num'));tr.appendChild(cell(fmtLast(t.last),'mono'));tb.appendChild(tr);});
+  renderPins(); renderKeySeen(s);
+  const rb=document.querySelector('#rids tbody');rb.innerHTML='';
+  s.radios.forEach(r=>{const tr=document.createElement('tr');
+    const idtd=cell(String(r.rid),'mono');idtd.style.cursor='pointer';idtd.title='click to watch';idtd.onclick=async()=>{await j('/api/watch',{rid:r.rid,on:true});refresh();};
+    tr.appendChild(idtd);tr.appendChild(editable('rid',r.rid,r.alias));tr.appendChild(cell(r.last_action||''));tr.appendChild(cell((r.last_tg||'')+'','mono'));tr.appendChild(cell(String(r.count),'num'));tr.appendChild(cell(fmtLast(r.last),'mono'));rb.appendChild(tr);});
+  document.getElementById('watchChips').innerHTML=(s.watch||[]).map(w=>`<span class="wchip" data-rid="${w}">${w} ✕</span>`).join('')||'<span class="small">none</span>';
+  renderWatchActivity(s);
+}
+// ---- P25 uplink signal-quality interpretation (how the SITE hears the radio) ----
+// RF level 0..15 (higher = stronger inbound); BER index 0..15 (higher = more errors).
+function rfQ(rf){ return rf==null?null:(rf>=11?'strong':rf>=7?'good':rf>=4?'marg':'weak'); }
+function berQ(b){ return b==null?null:(b<=0?'strong':b<=2?'good':b<=5?'marg':'weak'); }
+const QLAB={strong:'strong',good:'good',marg:'marginal',weak:'weak'};
+const BLAB={strong:'clean',good:'light errors',marg:'moderate errors',weak:'heavy errors'};
+function gauge(v,max,q){ const p=v==null?0:Math.round(Math.max(0,Math.min(1,v/max))*100);
+  return `<div class="gauge"><i class="g-${q||'weak'}" style="width:${p}%"></i></div>`; }
+function sparkBer(hist){ if(!hist||!hist.length)return '';
+  return '<span class="spk">'+hist.slice(-24).map(v=>{const h=Math.max(2,Math.round(v/15*16));return `<i class="g-${berQ(v)}" style="height:${h}px"></i>`;}).join('')+'</span>'; }
+function siteStr(d){ return (d.rfss!=null&&d.site!=null)?('Site '+d.rfss+'-'+d.site):(d.site!=null?('Site '+d.site):'site —'); }
+function sysStr(d){ return d.sysid==null?'—':(typeof d.sysid==='number'?('0x'+d.sysid.toString(16).toUpperCase()):d.sysid); }
+
+function watchCardHtml(d){
+  const rf=d.rf, ber=d.ber, rfc=rfQ(rf), bc=berQ(ber);
+  const sys=d.sysid!=null?(' · Sys '+sysStr(d)):'';
+  const tg=d.tg!=null?('TG '+d.tg+(d.tgtag?(' '+d.tgtag):'')):'idle';
+  const trouble=(d.reg_fails>0)||(d.rf_min!=null&&d.rf_min<4)||(d.ber_max!=null&&d.ber_max>=6);
+  const rfHtml=rf!=null?`<div class="wbar"><span class="lab">RF</span>${gauge(rf,15,rfc)}<b class="q-${rfc}">${rf}</b></div>`
+                       :`<div class="wbar"><span class="lab">RF/BER</span><span class="mut" style="font-size:10px">${CCONLY?'⚠ n/a in CC-only — pin its TG':'awaiting a call'}</span></div>`;
+  const berHtml=ber!=null?`<div class="wbar"><span class="lab">BER</span>${gauge(ber,15,bc)}<b class="q-${bc}">${ber}</b></div>`:'';
+  const rfBadge=d.reg_fails>0?`<span class="badge E">${d.reg_fails} reg-fail</span>`:'';
+  return `<div class="wcard${trouble?' trouble':''}" data-rid="${d.rid}" title="click for full coverage diagnostics">
+    <div class="wcard-top"><span class="wcard-rid">${pgrEsc('RID '+d.rid+(d.alias?(' '+d.alias):''))}</span>
+      <span class="wcard-site">${siteStr(d)}${sys}</span></div>
+    <div class="wcard-top" style="margin-top:3px"><span style="font-size:11px;color:#67e8f9">${pgrEsc(tg)}</span>
+      <span class="mut" style="font-size:10px">${d.last||''} ${rfBadge}</span></div>
+    <div class="wmet">${rfHtml}${berHtml}${d.hist&&d.hist.length?('<span class="lab">trend</span>'+sparkBer(d.hist)):''}</div>
+  </div>`;
+}
+
+function radioDetailHtml(d){
+  const rf=d.rf, ber=d.ber, rfc=rfQ(rf), bc=berQ(ber);
+  const site=(d.rfss!=null&&d.site!=null)?(d.rfss+'-'+d.site):(d.site!=null?String(d.site):'—');
+  let hints=[];
+  if(rf==null&&ber==null){
+    if(CCONLY) hints.push(['warn','No inbound RF/BER yet — you\'re in CC-only mode. The site only sends a radio\'s signal-quality (RF/BER) on the traffic channel during its calls, and CC-only never leaves the control channel. To capture it: pin this radio\'s talkgroup'+(d.tg!=null?(' (TG '+d.tg+')'):'')+' or turn CC-only off, then wait for it to key up. Site / affiliation info below still works in CC-only.']);
+    else hints.push(['',"No inbound RF/BER yet — this radio hasn't keyed up a voice call while OP25 was on its channel. It populates once it transmits and a call is followed."]);
+  }
+  if(d.rf_min!=null&&d.rf_min<4) hints.push(['bad','The site has heard this radio very weak (RF dipped to '+d.rf_min+'/15) — consistent with fringe coverage, a poor antenna/feedline, or being deep inside a building.']);
+  else if(d.rf_min!=null&&d.rf_min<7) hints.push(['warn','Inbound level dipped to '+d.rf_min+'/15 — marginal but usable; watch for dropouts at the edges of coverage.']);
+  if(d.ber_max!=null&&d.ber_max>=6) hints.push(['bad','High inbound bit-error rate seen (peaked '+d.ber_max+'/15) — the site decodes this radio with errors, causing garbled/dropped audio. Usually weak signal or multipath.']);
+  else if(d.ber_max!=null&&d.ber_max>=3) hints.push(['warn','Some inbound errors seen (peaked '+d.ber_max+'/15) — occasional audio artifacts likely at range.']);
+  if(d.reg_fails>0) hints.push(['bad','Registration was refused '+d.reg_fails+'×'+(d.last_reg_fail?(' (last: '+d.last_reg_fail+')'):'')+' — check the radio is provisioned on this system and within a valid site\'s coverage.']);
+  if(!hints.length&&rf!=null) hints.push(['','The site hears this radio cleanly ('+(QLAB[rfc]||'')+' RF, '+(BLAB[bc]||'')+') — no coverage problem indicated from the tower side.']);
+  const evs=(d.events||[]).slice().reverse();
+  const dl=(k,v)=>`<div class="dl"><span class="mut">${k}</span><b>${v}</b></div>`;
+  return `<h3><span>RID ${d.rid}${d.alias?(' · '+pgrEsc(d.alias)):''}</span><span class="x" onclick="closeRadio()">×</span></h3>
+  <div class="body">
+    <div class="sec"><h4>Site / system</h4>
+      ${dl('Site (RFSS-Site)', site)}${dl('System ID', sysStr(d))}${dl('NAC', d.nac||'—')}
+      ${dl('Site control channel', d.site_cc?d.site_cc+' MHz':'—')}
+      ${dl('Affiliated talkgroup', d.tg!=null?('TG '+d.tg+(d.tgtag?(' '+d.tgtag):'')):'—')}
+      ${dl('Times seen', d.count||0)}${dl('Last seen', d.last||'—')}</div>
+    <div class="sec"><h4>Inbound quality — how the site hears this radio</h4>
+      <div class="wmet">
+        <div class="wbar"><span class="lab">RF now</span>${gauge(rf,15,rfc)}<b class="q-${rfc}">${rf!=null?rf+'/15':'—'}</b></div>
+        <div class="wbar"><span class="lab">BER now</span>${gauge(ber,15,bc)}<b class="q-${bc}">${ber!=null?ber+'/15':'—'}</b></div></div>
+      ${dl('Weakest heard (RF min)', d.rf_min!=null?d.rf_min+'/15':'—')}
+      ${dl('Worst errors (BER max)', d.ber_max!=null?d.ber_max+'/15':'—')}
+      ${dl('Sig-qual reports', d.sq_count||0)}
+      ${d.hist&&d.hist.length?('<div class="dl"><span class="mut">BER trend</span>'+sparkBer(d.hist)+'</div>'):''}
+      ${hints.map(h=>`<div class="hint ${h[0]}">${h[1]}</div>`).join('')}</div>
+    <div class="sec"><h4>Recent activity</h4>
+      <div class="tl">${evs.length?evs.map(e=>{
+        let a=e.kind;
+        if(e.kind==='GRANT')a='voice → TG '+e.tg; else if(e.kind==='AFFIL')a='affiliate → TG '+e.tg;
+        else if(e.kind==='REG')a=(e.kind2||'register')+' '+(e.granted?'granted':'DENIED');
+        else if(e.kind==='DEREG')a='de-registered'; else if(e.kind==='REGFAIL')a=(e.kind2||'reg')+' '+String(e.reason||'denied').toUpperCase();
+        return `<div class="r"><span class="mut">${e.ts||''}</span><span>${pgrEsc(a)}</span></div>`;
+      }).join(''):'<div class="mut">no events recorded yet</div>'}</div></div>
+    <div class="sec"><div class="mut" style="font-size:10px">RF/BER are the P25 power-control signal-quality values the site reports for this radio (0–15 scale). They reflect the <b>uplink</b> (radio → tower) — what matters for portable coverage. A radio must key up for these to populate.</div></div>
+  </div>`;
+}
+function openRadio(rid){ const d=WDIAG[rid]; if(!d)return; openRid=rid;
+  document.getElementById('radioModalCard').innerHTML=radioDetailHtml(d);
+  document.getElementById('radioModal').classList.add('show'); }
+function closeRadio(){ openRid=null; document.getElementById('radioModal').classList.remove('show'); }
+
+function renderWatchActivity(s){
+  const wc=document.getElementById('watchCount'); if(wc)wc.textContent=(s.watch||[]).length;
+  const cards=document.getElementById('watchCards'), el=document.getElementById('watchAct');
+  const diag=s.watch_diag||[]; WDIAG={}; diag.forEach(d=>WDIAG[d.rid]=d);
+  if(cards){
+    cards.innerHTML=(s.watch||[]).length
+      ? (diag.length?diag.map(watchCardHtml).join(''):'<div class="mut" style="padding:6px 2px">watching — waiting for these radios to appear on the system…</div>')
+      : '<div class="mut" style="padding:6px 2px">no radios watched — add a RID (menu) or click a RID in the Radios table</div>';
+  }
+  if(openRid!=null&&WDIAG[openRid])document.getElementById('radioModalCard').innerHTML=radioDetailHtml(WDIAG[openRid]);
+  if(!el)return;
+  const evs=(s.watch_events||[]).slice().reverse();   // newest first
+  el.innerHTML=(evs.length&&(s.watch||[]).length)?evs.map(ev=>{
+    const rid='RID '+ev.rid+(ev.ridalias?(' '+ev.ridalias):'');
+    const tg=ev.tg!=null?('TG '+ev.tg+(ev.tgtag?(' '+ev.tgtag):'')):'';
+    let act='', col='#c5cee0';
+    if(ev.kind==='GRANT'){act='voice → '+(tg||'?')+(ev.freq?(' @ '+ev.freq):''); col='#67e8f9';}
+    else if(ev.kind==='AFFIL'){act='affiliate → '+(tg||'?'); col='#a78bfa';}
+    else if(ev.kind==='REG'){act=(ev.kind2||'register')+' '+(ev.granted?'granted':'DENIED')+(tg?(' '+tg):''); col=ev.granted?'#36d399':'#ff6b6b';}
+    else if(ev.kind==='DEREG'){act='de-registered'; col='#94a3b8';}
+    else if(ev.kind==='REGFAIL'){act=(ev.kind2||'reg')+' '+String(ev.reason||'denied').toUpperCase(); col='#ff4d4f';}
+    else{act=ev.kind;}
+    return `<div class="dl"><span style="white-space:nowrap"><span class="mut">${ev.ts||''}</span> <b class="mono">${pgrEsc(rid)}</b></span><span style="color:${col};text-align:right;padding-left:10px">${pgrEsc(act)}</span></div>`;
+  }).join(''):'<div class="mut" style="padding:6px 2px">no events yet</div>';
+}
+document.getElementById('watchChips').onclick=async e=>{const c=e.target.closest('.wchip');if(c){await j('/api/watch',{rid:c.dataset.rid,on:false});refresh();}};
+document.getElementById('watchCards').addEventListener('click',e=>{const c=e.target.closest('.wcard');if(c&&c.dataset.rid)openRadio(+c.dataset.rid);});
+document.getElementById('radioModal').addEventListener('click',e=>{if(e.target.id==='radioModal')closeRadio();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeRadio();});
+
+// collapse panels
+document.querySelectorAll('[data-collapse]').forEach(x=>x.onclick=()=>{const p=x.closest('.panel');p.classList.toggle('collapsed');x.textContent=p.classList.contains('collapsed')?'+':'—';});
+const main=document.getElementById('main');
+function saveLayout(){} function loadLayout(){}
+// view tabs (navigation)
+document.querySelectorAll('.vtab').forEach(t=>t.onclick=()=>{document.querySelectorAll('.vtab').forEach(b=>b.classList.toggle('active',b===t));main.className='views v-'+t.dataset.view;try{localStorage.setItem('lg_view',t.dataset.view);}catch(e){} if(t.dataset.view==='map'){setTimeout(initMap,40);}});
+// menu-bar dropdowns
+document.querySelectorAll('.menu .mbtn').forEach(b=>b.onclick=e=>{e.stopPropagation();const m=b.parentNode,was=m.classList.contains('open');document.querySelectorAll('.menu').forEach(x=>x.classList.remove('open'));if(!was)m.classList.add('open');});
+document.addEventListener('click',e=>{if(!e.target.closest('.menu'))document.querySelectorAll('.menu').forEach(x=>x.classList.remove('open'));});
+// restore last-used view
+try{const v=localStorage.getItem('lg_view');if(v&&v!=='live'){const t=document.querySelector('.vtab[data-view="'+v+'"]');if(t)t.click();}}catch(e){}
+
+// controls
+switchBtn.onclick=async()=>{await j('/api/switch',{id:sysSel.value});BUF=[];activeCalls={};feed.innerHTML='';setTimeout(refresh,1500);};
+ctlStart.onclick=async()=>{await j('/api/control',{action:'restart'});setTimeout(refresh,1200);};
+wbBtn.onclick=async()=>{const on=wbBtn.textContent.includes('on');wbBtn.textContent='wideband: …';await j('/api/sdr',{wideband:!on});BUF=[];activeCalls={};feed.innerHTML='';setTimeout(refresh,2000);};
+ccBtn.onclick=async()=>{const on=ccBtn.textContent.includes('on');ccBtn.textContent='CC-only: …';await j('/api/ccmode',{on:!on});BUF=[];activeCalls={};feed.innerHTML='';setTimeout(refresh,2000);};
+document.getElementById('ccData').onclick=async function(){const on=this.classList.contains('on');this.innerHTML='📡 CC-only: …';await j('/api/ccmode',{on:!on});BUF=[];activeCalls={};feed.innerHTML='';setTimeout(refresh,2000);};
+ctlStop.onclick=async()=>{await j('/api/control',{action:'stop'});setTimeout(refresh,500);};
+sdrApply.onclick=async()=>{await j('/api/sdr',{gains:sdrGains.value,offset:sdrOffset.value,ppm:sdrPpm.value,rate:sdrRate.value,args:sdrArgs.value});BUF=[];feed.innerHTML='';setTimeout(refresh,1500);};
+watchAdd.onclick=async()=>{if(watchInp.value){await j('/api/watch',{rid:watchInp.value,on:true});watchInp.value='';refresh();}};
+impBtn.onclick=async()=>{const r=await j('/api/import',{text:impText.value,type:impType.value,id_col:impId.value,name_col:impName.value});impMsg.textContent='imported '+r.added;refresh();};
+eLoad.onclick=async()=>{const r=await (await fetch('/api/systems')).json();const s=r.systems[r.active];if(!s)return;
+  eName.value=s.name;eCounty.value=s.county||'';if(![...eType.options].some(o=>o.value===s.type))eType.add(new Option(s.type,s.type));eType.value=s.type||'P25 Phase II';eCC.value=(s.control_channels||[]).join(', ');eMod.value=s.modulation||'cqpsk';eNac.value=s.nac||'';};
+eSave.onclick=async()=>{await j('/api/systems',{name:eName.value,county:eCounty.value,type:eType.value,
+  control_channels:eCC.value.split(',').map(x=>x.trim()).filter(Boolean),modulation:eMod.value,nac:eNac.value});refresh();};
+eDel.onclick=async()=>{const r=await (await fetch('/api/systems')).json();if(confirm('Delete '+r.active+'?')){await j('/api/systems/delete',{id:r.active});refresh();}};
+{const _si=document.getElementById('sysImport'), _sf=document.getElementById('sysImportFile');
+ if(_si&&_sf){_si.onclick=()=>_sf.click();
+   _sf.onchange=async()=>{const f=_sf.files[0]; if(!f)return;
+     try{const obj=JSON.parse(await f.text()); const r=await j('/api/systems/import',obj);
+       alert('Imported systems: '+(r.added||0)+' new, '+(r.merged||0)+' merged');}catch(e){alert('Import failed: '+e);}
+     _sf.value=''; refresh();};}}
+
+// ---------- WS audio: per-channel mixer (pan L/C/R, mute, solo, click-to-focus) ----------
+let audioCtx=null, listenSet=new Set(), monitored=[], masterAudio=false, currentTG=null;
+const WSRATE=8000, PORTS=[9000,9001,9002]; let soloPort=null, chantg={}; const ports={};
+function pst(p){if(!ports[p])ports[p]={q:[],next:0,mute:false,pan:((p-9000)%2===0?-1:1),gain:null,pan_:null};return ports[p];}
+const BOOSTS=[1,2,4,6]; let boost=1, boostNode=null;
+try{boost=+(localStorage.getItem('lgBoost')||1)||1;}catch(e){}
+function ensureAudioCtx(){if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)({sampleRate:WSRATE});if(audioCtx.state==='suspended')audioCtx.resume();ensureMaster();PORTS.forEach(ensureNodes);}
+// boost before a limiter: makes quiet vocoder audio loud on small speakers without hard clipping
+function ensureMaster(){if(boostNode||!audioCtx)return;boostNode=audioCtx.createGain();boostNode.gain.value=boost;const lim=audioCtx.createDynamicsCompressor();lim.threshold.value=-6;lim.knee.value=6;lim.ratio.value=12;lim.attack.value=0.003;lim.release.value=0.15;boostNode.connect(lim);lim.connect(audioCtx.destination);}
+function ensureNodes(p){const st=pst(p);if(audioCtx&&!st.gain){ensureMaster();st.gain=audioCtx.createGain();st.pan_=audioCtx.createStereoPanner();st.pan_.pan.value=st.pan;st.gain.connect(st.pan_);st.pan_.connect(boostNode);}}
+function portOpen(p){const st=pst(p);if(!masterAudio||st.mute)return false;if(soloPort!==null&&soloPort!==p)return false;return true;}
+function playPort(p){const st=ports[p];if(!audioCtx||!st.gain)return;while(st.q.length){const s=st.q.shift();const buf=audioCtx.createBuffer(1,s.length,WSRATE);const ch=buf.getChannelData(0);for(let i=0;i<s.length;i++)ch[i]=s[i]/32768;const src=audioCtx.createBufferSource();src.buffer=buf;src.connect(st.gain);const now=audioCtx.currentTime;if(st.next<now)st.next=now;src.start(st.next);st.next+=buf.duration;}}
+function connectPort(p){pst(p);let w;try{w=new WebSocket('ws://'+location.hostname+':'+p);}catch(e){return;}w.binaryType='arraybuffer';
+  w.onmessage=e=>{const st=pst(p);if(typeof e.data==='string'){try{const m=JSON.parse(e.data);if(m.cmd==='audio_drain'||m.cmd==='audio_drop'){st.q=[];st.next=0;}}catch(x){}return;}st.lastAudio=Date.now();if(portOpen(p)){ensureNodes(p);st.q.push(new Int16Array(e.data));playPort(p);}};
+  w.onclose=()=>setTimeout(()=>connectPort(p),3000);w.onerror=()=>{try{w.close();}catch(x){}};}
+function setPan(p,v){const st=pst(p);st.pan=v;if(st.pan_)st.pan_.pan.value=v;renderMixer();}
+function focusCall(tg){
+  masterAudio=true; ensureAudioCtx();
+  const ab=document.getElementById('audioBtn'); if(ab){ab.textContent='🎧 audio: ON';ab.classList.add('on');}
+  const now=Date.now(); let target=null;
+  // prefer the port that is actually STREAMING this TG right now
+  PORTS.forEach(p=>{const st=pst(p),ch=p-9000,live=st.lastAudio&&(now-st.lastAudio<1500);
+    if(live&&chantg[ch]&&chantg[ch].tg===tg)target=p;});
+  if(target!==null){pst(target).mute=false; soloPort=(soloPort===target)?null:target;}
+  else{soloPort=null;}   // its audio isn't on a live port right now -> play all live so you still hear traffic
+  updateNow(); renderMixer();
+}
+function renderMixer(){const el=document.getElementById('mixer');if(!el)return;
+  el.innerHTML=PORTS.map(p=>{const st=pst(p);const ch=p-9000;const ct=chantg[ch];
+    const live=st.lastAudio&&(Date.now()-st.lastAudio<1500);   // live = THIS port is actually streaming audio now
+    const lbl=live?('▶ TG '+(ct?ct.tg:'?')+((ct&&TAGMAP[ct.tg])?(' '+TAGMAP[ct.tg]):'')):'idle';
+    const on=v=>st.pan===v?'on':'';
+    return `<div class="mx${live?' liverow':''}"><span class="mxl">Ch${ch} · ${lbl}</span>
+      <span class="seg"><button data-pan="${p}:-1" class="${on(-1)}">L</button><button data-pan="${p}:1" class="${on(1)}">R</button></span>
+      <button data-mute="${p}" class="${st.mute?'on':''}">${st.mute?'muted':'mute'}</button>
+      <button data-solo="${p}" class="${soloPort===p?'on':''}">solo</button></div>`;}).join('');}
+function updateNow(){const el=document.getElementById('nowPlaying');const mon=monitored.length?('🔒 locked '+monitored.length+' TG'+(monitored.length>1?'s':'')):'scan all';el.textContent=mon+(masterAudio?' · 🔊 on':'');}
+function showBoost(){const b=document.getElementById('boostBtn');if(b){b.innerHTML='&#128266; boost: '+boost+'x';b.classList.toggle('on',boost>1);}}
+document.getElementById('boostBtn').onclick=function(){boost=BOOSTS[(BOOSTS.indexOf(boost)+1)%BOOSTS.length];try{localStorage.setItem('lgBoost',boost);}catch(e){}if(boostNode)boostNode.gain.value=boost;showBoost();};
+showBoost();
+document.getElementById('audioBtn').onclick=function(){masterAudio=!masterAudio;ensureAudioCtx();this.textContent='🎧 audio: '+(masterAudio?'ON':'off');this.classList.toggle('on',masterAudio);updateNow();renderMixer();};
+
+// ---- Pinned talkgroups: lock the receiver (OP25 voice whitelist) onto specific TGs ----
+// `monitored` is the server's authoritative lock list (LISTEN). Pin/unpin edits it and
+// re-tunes. Rapid edits are batched so multiple pins cause a single re-acquire.
+function setPins(list){
+  monitored=[...new Set(list)];           // optimistic; server confirms on next refresh
+  renderPins(); updateNow();
+  clearTimeout(_pinTimer);
+  _pinTimer=setTimeout(async()=>{
+    _pinBusy=true; renderPins();
+    await j('/api/listen',{tgids:monitored});
+    setTimeout(()=>{_pinBusy=false;refresh();},1400);
+  },600);                                  // debounce: batch quick multi-pins into one re-tune
+}
+function togglePin(tg){ tg=+tg; setPins(monitored.includes(tg)?monitored.filter(x=>x!==tg):[...monitored,tg]); }
+function pinTG(tg){ tg=+tg; if(!tg||monitored.includes(tg))return; setPins([...monitored,tg]); }
+function unpinTG(tg){ tg=+tg; setPins(monitored.filter(x=>x!==tg)); }
+function renderPins(){
+  const chips=document.getElementById('pinChips'), st=document.getElementById('pinStatus');
+  const html=monitored.map(tg=>{
+    const nm=TAGMAP[tg]?(' '+TAGMAP[tg]):'';
+    return `<span class="pinchip">📌 ${tg}${pgrEsc(nm)}<span class="x" data-unpin="${tg}">✕</span></span>`;
+  }).join('');
+  if(chips) chips.innerHTML=html;
+  const lc=document.getElementById('lisChips'); if(lc) lc.innerHTML=html||'<span class="mut">not locked — following all voice</span>';
+  if(st) st.textContent=_pinBusy?'re-tuning…':(monitored.length?('🔒 locked on '+monitored.length+' — receiver follows only these'):'not pinned — following all voice');
+}
+document.getElementById('pinAdd').onclick=()=>{const i=document.getElementById('pinInput');const tg=parseInt((i.value||'').replace(/\D/g,''),10);if(tg){ensureAudioCtx();pinTG(tg);}i.value='';i.focus();};
+document.getElementById('pinInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();document.getElementById('pinAdd').click();}});
+document.getElementById('pinClear').onclick=()=>setPins([]);
+// header "Listen TG": same pin/lock list as the Talkgroups tab, plus make sure audio is on
+document.getElementById('lisAdd').onclick=()=>{const i=document.getElementById('lisInp');const tg=parseInt((i.value||'').replace(/\D/g,''),10);
+  if(tg){ensureAudioCtx();if(!masterAudio)document.getElementById('audioBtn').click();pinTG(tg);}i.value='';i.focus();};
+document.getElementById('lisInp').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();document.getElementById('lisAdd').click();}});
+document.getElementById('lisClear').onclick=()=>setPins([]);
+document.getElementById('lisChips').addEventListener('click',e=>{const x=e.target.closest('[data-unpin]');if(x)unpinTG(+x.dataset.unpin);});
+// ---- crypt keys (metadata only comes back from the server)
+let KEYS=[], KEYS_LOADED=[];
+const kidNorm=k=>'0x'+(parseInt(String(k).replace(/^0x/i,''),16)||0).toString(16).padStart(4,'0');
+async function loadKeys(){try{const r=await (await fetch('/api/keys')).json();KEYS=r.keys||[];KEYS_LOADED=r.loaded||[];}catch(e){return;}
+  document.getElementById('keyList').innerHTML=KEYS.length?KEYS.map(k=>`<div class="mrow" style="align-items:center"><span class="mono">${k.keyid}</span><span>${k.alg}</span><span>${pgrEsc(k.label||'')}</span><span class="mono mut">…${k.tail}</span>`+
+    `<span>${KEYS_LOADED.includes(k.keyid)?'<span title="decoder accepted it">✓ loaded</span>':'<span class="mut" title="not reported by OP25 yet">pending</span>'}</span><button class="mbtn2" data-delkey="${k.keyid}">✕</button></div>`).join(''):'<span class="mut">no keys stored</span>';}
+document.getElementById('keyList').addEventListener('click',async e=>{const b=e.target.closest('[data-delkey]');if(!b)return;
+  if(!confirm('Delete key '+b.dataset.delkey+'?'))return;await j('/api/keys/delete',{keyid:b.dataset.delkey});setTimeout(loadKeys,1500);});
+document.getElementById('keyAlg').onchange=function(){document.getElementById('keyHex').placeholder={'0x84':'64 hex chars for AES-256','0x81':'16 hex chars for DES-OFB','0xaa':'10 hex chars for ADP'}[this.value];};
+document.getElementById('keyAdd').onclick=async()=>{const m=document.getElementById('keyMsg');m.textContent='saving…';
+  const r=await j('/api/keys',{keyid:document.getElementById('keyId').value,algid:document.getElementById('keyAlg').value,key:document.getElementById('keyHex').value,label:document.getElementById('keyLbl').value});
+  m.textContent=r.ok?r.msg:('✗ '+(r.err||'failed'));if(r.ok){document.getElementById('keyHex').value='';setTimeout(loadKeys,3000);}};
+function renderKeySeen(s){KEYS_LOADED=s.keys_loaded||KEYS_LOADED;const have=new Set(KEYS.map(k=>k.keyid));
+  const enc=s.talkgroups.filter(t=>t.encrypted&&t.keyid);
+  document.getElementById('keySeen').innerHTML=enc.length?enc.slice(0,12).map(t=>{const kid=kidNorm(t.keyid);
+    return `<div>TG <b>${t.tgid}</b> ${pgrEsc(t.tag||'')} — ${t.algid} key <span class="mono">${kid}</span> ${have.has(kid)?'<b>✓ have key</b>':'<span class="mut">no key</span>'}</div>`;}).join(''):'none yet';}
+loadKeys();
+// ---- drive survey panel (polls only while the System tab is showing)
+let SV={on:false};
+const svCls=r=>r==null?'':(r>=20?'color:#4ade80':r>=5?'color:#facc15':r>0?'color:#fb923c':'color:#f87171');
+async function svRefresh(){if(!document.getElementById('main').classList.contains('v-system'))return;
+  let r;try{r=await (await fetch('/api/survey')).json();}catch(e){return;}SV=r;const L=r.last||{};
+  document.getElementById('svBtn').innerHTML=r.on?'&#9632; Stop survey':'&#9679; Start survey';document.getElementById('svBtn').classList.toggle('on',r.on);
+  document.getElementById('svStatus').innerHTML=(r.on?('recording '+r.file+' — '+r.rows+' points'):(r.error?('stopped: '+r.error):'not recording — live values below, press Start to log to '+r.dir))+
+    (L.cc_only===0?' · <b style="color:#facc15">CC-only is OFF: the receiver leaves the control channel during calls, so TSBK/s drops to 0 then. Turn CC-only on for a clean survey.</b>':'');
+  const tile=(k,v,st)=>`<div class="dcard"><div class="dk">${k}</div><div style="font-size:20px;font-weight:700;${st||''}">${v??'—'}</div></div>`;
+  document.getElementById('svNow').innerHTML=tile('GPS',L.gps_fix&&L.gps_fix!=='none'?(L.gps_fix+' · '+(L.sats_used??0)+'/'+(L.sats??0)+' sats'):'no fix')+
+    tile('Position',L.lat!=null?(L.lat.toFixed(5)+', '+L.lon.toFixed(5)):'—')+tile('CC decode',L.tsbk_per_s!=null?L.tsbk_per_s+' TSBK/s':'—',svCls(L.tsbk_per_s))+
+    tile('CC timeouts / sync losses',(L.cc_timeouts??'—')+' / '+(L.sync_losses??'—'),(L.cc_timeouts||L.sync_losses)?'color:#fb923c':'')+
+    tile('Site',L.site!=null?('RFSS '+L.rfss+' · Site '+L.site+' · NAC '+(L.nac||'—')):'—')+tile('Freq error',L.freq_err_hz!=null?(Math.round(L.freq_err_hz)+' Hz'):'—');
+  document.getElementById('svTbl').innerHTML='<thead><tr><th>time</th><th>fix</th><th>lat,lon</th><th>CC</th><th class="num">TSBK/s</th><th class="num">grants</th><th class="num">CC t/o</th><th class="num">sync</th></tr></thead><tbody>'+
+    (r.recent||[]).map(x=>`<tr><td class="mono">${x.time.slice(11)}</td><td>${x.gps_fix}</td><td class="mono">${x.lat!=null?x.lat.toFixed(5)+','+x.lon.toFixed(5):'—'}</td><td class="mono">${x.cc_mhz||'—'}</td><td class="num" style="${svCls(x.tsbk_per_s)}">${x.tsbk_per_s}</td><td class="num">${x.grants}</td><td class="num">${x.cc_timeouts}</td><td class="num">${x.sync_losses}</td></tr>`).join('')+'</tbody>';
+  document.getElementById('svFiles').innerHTML=(r.files||[]).length?('Saved surveys: '+r.files.map(f=>`<div class="mono">${f.name} (${f.kb} KB) · <a href="/api/survey/file/${encodeURIComponent(f.name)}">CSV</a> · <a href="/api/survey/file/${encodeURIComponent(f.name.replace(/\.csv$/,'.kml'))}">KML (Google Earth)</a></div>`).join('')):'';}
+document.getElementById('svBtn').onclick=async()=>{if(SV.on)await j('/api/survey/stop',{});else await j('/api/survey/start',{label:document.getElementById('svLabel').value});svRefresh();};
+setInterval(svRefresh,3000);
+// ---- radio diagnostics + watch sessions
+let RD={};
+const fileLinks=fs=>fs.map(f=>`<div class="mono">${f.name} (${f.kb} KB) · <a href="/api/report/${encodeURIComponent(f.name)}" target="_blank">${f.name.endsWith('.html')?'open report':'CSV'}</a></div>`).join('');
+async function rdRefresh(){let r;try{r=await (await fetch('/api/radiodiag')).json();}catch(e){return;}RD=r;
+  const ws=r.wsess, wb=document.getElementById('wsBtn');
+  wb.innerHTML=ws.on?'&#9632; End watch &amp; build report':'&#9654; Start watch';wb.classList.toggle('on',ws.on);
+  document.getElementById('wsStatus').textContent=ws.on?('since '+ws.start.slice(11)+' · '+ws.events+' events · '+ws.rids.length+' RID(s)'):(ws.rids.length?ws.rids.length+' RID(s) on watch':'add radio IDs above first');
+  const reps=(r.reports||[]).filter(f=>f.name.startsWith('watch-')&&f.name.endsWith('.html')).slice(0,5);
+  document.getElementById('wsReports').innerHTML=reps.length?('Reports:'+fileLinks(reps)):'';
+  if(!document.getElementById('main').classList.contains('v-system'))return;
+  const dl=r.diaglog;document.getElementById('dlBtn').innerHTML=dl.on?'&#9632; Stop diagnostics log':'&#9679; Start diagnostics log';document.getElementById('dlBtn').classList.toggle('on',dl.on);
+  document.getElementById('dlStatus').textContent=(dl.on?('logging '+dl.file+' — '+dl.rows+' rows'):(dl.error?('stopped: '+dl.error):'log off'))+' · '+r.n+' radios seen';
+  const berSt=b=>b==null?'':(b>=4?'color:#f87171':b>=2?'color:#facc15':'color:#4ade80'), erSt=e=>e==null?'':(e>=0.05?'color:#f87171':e>=0.01?'color:#facc15':'color:#4ade80');
+  const fx=(v,d)=>v==null?'—':(+v).toFixed(d);
+  document.getElementById('rdTbl').innerHTML='<thead><tr><th>RID</th><th>Alias</th><th>Last TG</th><th>Site</th><th class="num">Uplink RF last/min</th><th class="num">Uplink BER last/max</th><th class="num">Voice err last/max</th><th class="num">Calls</th><th class="num">Seen</th><th>Last</th></tr></thead><tbody>'+
+    r.radios.map(x=>`<tr${x.watched?' style="background:rgba(56,189,248,.10)"':''}><td class="mono">${x.watched?'👁 ':''}${x.rid}</td><td>${pgrEsc(x.alias||'')}</td><td>${x.last_tg??''} ${pgrEsc(x.tgtag||'')}</td><td>${x.site!=null?x.rfss+'-'+x.site:''}</td>`+
+      `<td class="num">${x.rf??'—'} / ${x.rf_min??'—'}</td><td class="num" style="${berSt(x.ber_max)}">${x.ber??'—'} / ${x.ber_max??'—'}</td>`+
+      `<td class="num" style="${erSt(x.voice_err_max)}">${fx(x.voice_err,4)} / ${fx(x.voice_err_max,4)}</td><td class="num">${x.voice_calls||''}</td><td class="num">${x.count}</td><td class="mono">${(x.last||'').split(' ').pop().split('.')[0]}</td></tr>`).join('')+'</tbody>';
+  document.getElementById('rdFiles').innerHTML=(r.reports||[]).length?('Saved logs &amp; reports ('+r.dir+'):'+fileLinks(r.reports.slice(0,10))):'';}
+document.getElementById('dlBtn').onclick=async()=>{await j('/api/diaglog/'+(RD.diaglog&&RD.diaglog.on?'stop':'start'),{});rdRefresh();};
+document.getElementById('wsBtn').onclick=async()=>{const on=RD.wsess&&RD.wsess.on;const r=await j('/api/watchsess/'+(on?'stop':'start'),{});
+  document.getElementById('wsStatus').textContent=r.ok?r.msg:('✗ '+(r.err||'failed'));if(r.ok&&r.report)window.open('/api/report/'+encodeURIComponent(r.report),'_blank');setTimeout(rdRefresh,500);};
+setInterval(rdRefresh,3000); rdRefresh();
+// ---- antenna / RSSI meter: fast poll while its panel is on screen, header pill otherwise
+let RS={peak:null};
+const rsCol=v=>v==null?'':(v>=-35?'#4ade80':v>=-55?'#facc15':'#f87171'), rsPct=v=>Math.max(0,Math.min(100,(v+90)/90*100));
+function rsPill(v){const p=document.getElementById('rssiPill');p.innerHTML='&#128246; RSSI '+(v==null?'—':v.toFixed(1)+' dB');p.style.color=rsCol(v);}
+function rsVisible(){const el=document.querySelector('.panel[data-id="rssi"]');return el&&el.offsetParent!==null&&!el.classList.contains('uc-off');}
+async function rsPoll(){let r;try{r=await (await fetch('/api/rssi')).json();}catch(e){return;}const v=r.level;rsPill(v);
+  if(!rsVisible())return;
+  if(v!=null&&(RS.peak==null||v>RS.peak))RS.peak=v;
+  const big=document.getElementById('rsBig');big.textContent=v==null?'—':v.toFixed(1);big.style.color=rsCol(v);
+  document.getElementById('rsPeak').textContent=RS.peak==null?'—':RS.peak.toFixed(1);
+  const h=r.hist||[],ago=h.length>10?h[h.length-11][1]:null,d=(v!=null&&ago!=null)?v-ago:null,dl=document.getElementById('rsDelta');
+  dl.textContent=d==null?'—':(d>=0?'+':'')+d.toFixed(1);dl.style.color=d==null?'':(d>0.4?'#4ade80':d<-0.4?'#f87171':'');
+  document.getElementById('rsBar').style.width=(v==null?0:rsPct(v))+'%';document.getElementById('rsPeakMark').style.left=(RS.peak==null?0:rsPct(RS.peak))+'%';
+  const cv=document.getElementById('rsSpark'),w=cv.width=cv.clientWidth||600,ht=cv.height,cx=cv.getContext('2d');cx.clearRect(0,0,w,ht);
+  if(h.length>1){const vs=h.map(x=>x[1]),lo=Math.min(...vs)-2,hi=Math.max(...vs)+2;cx.strokeStyle='#38bdf8';cx.lineWidth=2;cx.beginPath();
+    h.forEach((x,i)=>{const X=i/(h.length-1)*w,Y=ht-(x[1]-lo)/(hi-lo)*ht;i?cx.lineTo(X,Y):cx.moveTo(X,Y);});cx.stroke();
+    cx.fillStyle='#8aa0b8';cx.font='11px sans-serif';cx.fillText(hi.toFixed(0)+' dB',4,12);cx.fillText(lo.toFixed(0)+' dB',4,ht-4);}
+  document.getElementById('rsInfo').innerHTML=(r.supported?'':'<b style="color:#f87171">OP25 is not reporting level — run Clockwork Orange step 40 (applies the RSSI patch). </b>')+
+    'Channel '+(r.freq?(r.freq/1e6).toFixed(5)+' MHz':'—')+' · gain '+(r.gains||'—')+' (fixed, so readings compare)'+
+    (r.cc_only?'':' · <b style="color:#facc15">CC-only is off: the reading jumps to voice channels during calls — turn it on while tuning</b>')+
+    '<br>Relative dBFS, not calibrated dBm. Change the antenna a little at a time and keep the length with the highest steady reading; ~0.5 dB steps are real.';}
+document.getElementById('rsReset').onclick=()=>{RS.peak=null;rsPoll();};
+setInterval(()=>{if(rsVisible())rsPoll();},700); setInterval(()=>{if(!rsVisible())rsPoll();},3000); rsPoll();
+document.getElementById('rssiPill').onclick=()=>{const t=document.querySelector('.vtab[data-view="live"]');if(t)t.click();
+  if(typeof UC!=='undefined'&&UC.on){UC.sel.live='rssi';ucSave();ucBuild();}setTimeout(()=>document.querySelector('.panel[data-id="rssi"]').scrollIntoView({behavior:'smooth'}),80);};
+// ---- uConsole mode: bigger UI (CSS zoom), one panel at a time per view via a panel tab bar; fullscreen toggle.
+// Defaults on for the uConsole's 1280x720 screen; choice + zoom + last panel per view are remembered.
+const UC={on:false,z:1.35,sel:{}};
+try{const sv=JSON.parse(localStorage.getItem('lg_uc')||'null');if(sv)Object.assign(UC,sv);else UC.on=(screen.width<=1280&&screen.height<=800);}catch(e){}
+function ucSave(){try{localStorage.setItem('lg_uc',JSON.stringify(UC));}catch(e){}}
+const ucView=()=>((document.getElementById('main').className.match(/v-(\w+)/)||[])[1]);
+function ucBuild(){const mn=document.getElementById('main'),strip=document.getElementById('ucStrip'),view=ucView();
+  const ps=[...mn.querySelectorAll('.panel[data-view="'+view+'"]')];
+  if(!UC.on){ps.forEach(p=>p.classList.remove('uc-off'));strip.innerHTML='';return;}
+  let sel=UC.sel[view]; if(!ps.some(p=>p.dataset.id===sel))sel=ps[0]&&ps[0].dataset.id;
+  ps.forEach(p=>p.classList.toggle('uc-off',p.dataset.id!==sel));
+  strip.innerHTML=ps.length>1?ps.map(p=>{const t=((p.querySelector('.phead .ttl')||p).textContent||'').trim().split(/\s+[—–-]\s+/)[0].slice(0,34);
+    return `<button data-uc="${p.dataset.id}" class="${p.dataset.id===sel?'active':''}">${pgrEsc(t)}</button>`;}).join(''):'';
+  if(view==='map')setTimeout(()=>{try{initMap();}catch(e){}},60);}
+function ucApply(){document.body.classList.toggle('uc',UC.on);document.body.style.setProperty('--ucz',UC.z);
+  document.getElementById('ucBtn').classList.toggle('on',UC.on);ucBuild();}
+document.getElementById('ucStrip').addEventListener('click',e=>{const b=e.target.closest('[data-uc]');if(!b)return;UC.sel[ucView()]=b.dataset.uc;ucSave();ucBuild();window.scrollTo(0,0);});
+document.getElementById('ucBtn').onclick=()=>{UC.on=!UC.on;ucSave();ucApply();};
+document.getElementById('ucMinus').onclick=()=>{UC.z=Math.max(1,Math.round((UC.z-0.1)*10)/10);ucSave();ucApply();};
+document.getElementById('ucPlus').onclick=()=>{UC.z=Math.min(2.2,Math.round((UC.z+0.1)*10)/10);ucSave();ucApply();};
+document.getElementById('fsBtn').onclick=()=>{if(document.fullscreenElement)document.exitFullscreen();else document.documentElement.requestFullscreen().catch(()=>{});};
+document.addEventListener('fullscreenchange',()=>document.getElementById('fsBtn').classList.toggle('on',!!document.fullscreenElement));
+new MutationObserver(ucBuild).observe(document.getElementById('main'),{attributes:true,attributeFilter:['class']});
+ucApply();
+document.getElementById('pinChips').addEventListener('click',e=>{const x=e.target.closest('[data-unpin]');if(x)unpinTG(+x.dataset.unpin);});
+document.getElementById('monAll').onclick=function(){setPins([]);};
+document.addEventListener('click',e=>{const t=e.target;
+  if(t.dataset&&t.dataset.pan){const a=t.dataset.pan.split(':');setPan(+a[0],+a[1]);}
+  else if(t.dataset&&t.dataset.mute!==undefined&&t.dataset.mute!==''){const st=pst(+t.dataset.mute);st.mute=!st.mute;renderMixer();}
+  else if(t.dataset&&t.dataset.solo!==undefined&&t.dataset.solo!==''){const p=+t.dataset.solo;soloPort=(soloPort===p)?null:p;ensureAudioCtx();renderMixer();}
+  else{const tile=t.closest('.call');if(tile&&tile.dataset.tg){focusCall(+tile.dataset.tg);}}});
+PORTS.forEach(connectPort);
+
+// ---------- Radio Map (GPS / LRRP positions) ----------
+let lgmap=null, mapTiles=null, mapLayer=null, posMarkers={}, mapAuto=true;
+function colorForTg(tg){
+  if(tg==null||tg==='')return '#38bdf8';
+  let h=0; const s=String(tg); for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;
+  return 'hsl('+(h%360)+',72%,62%)';
+}
+function initMap(){
+  if(lgmap){lgmap.invalidateSize();return;}
+  if(typeof L==='undefined'){console.warn('leaflet not loaded');return;}
+  lgmap=L.map('lgmap',{preferCanvas:true,zoomControl:true}).setView([26.12,-80.14],10);
+  // CARTO's free dark_all now serves "API KEY REQUIRED" tiles; OSM standard + an invert filter keeps the dark look
+  mapTiles=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    {maxZoom:19,attribution:'© OpenStreetMap'});
+  mapTiles.on('tileerror',()=>{const el=document.getElementById('lgmap');if(el)el.style.background='#0a0f17';});
+  mapTiles.addTo(lgmap);
+  mapTiles.getContainer().style.filter='invert(1) hue-rotate(180deg) brightness(.9) contrast(.9) saturate(.6)';
+  mapLayer=L.layerGroup().addTo(lgmap);
+  fetch('/api/positions').then(r=>r.json()).then(d=>{
+    (d.positions||[]).forEach(p=>onPosition(p,true));
+    if(d.trails)for(const rid in d.trails){const pm=posMarkers[rid];if(pm&&d.trails[rid]){pm.points=d.trails[rid].map(p=>[p.lat,p.lon]);drawTrail(pm);}}
+    fitMap();
+  }).catch(()=>{});
+  setTimeout(()=>lgmap.invalidateSize(),60);
+}
+function drawTrail(pm){
+  if(pm.trail){mapLayer.removeLayer(pm.trail);pm.trail=null;}
+  if(pm.points&&pm.points.length>1)pm.trail=L.polyline(pm.points,{color:pm.color,weight:2,opacity:.4}).addTo(mapLayer);
+}
+function onPosition(ev,quiet){
+  if(!lgmap||ev.lat==null||ev.lon==null)return;
+  const rid=ev.rid, color=colorForTg(ev.tg), ll=[ev.lat,ev.lon];
+  const label=`RID ${rid}${ev.alias?(' '+ev.alias):''}`+(ev.tg!=null?(` · TG ${ev.tg}${ev.tgtag?(' '+ev.tgtag):''}`):'');
+  let pm=posMarkers[rid];
+  if(!pm){
+    pm={color,points:[]};
+    pm.marker=L.circleMarker(ll,{radius:7,color:'#0a0f17',weight:2,fillColor:color,fillOpacity:.92}).addTo(mapLayer);
+    pm.marker.bindTooltip(label,{permanent:true,direction:'right',className:'maplbl',offset:[8,0]});
+    pm.marker.on('click',()=>{if(ev.tg!=null)focusCall(+ev.tg);});
+    posMarkers[rid]=pm;
+  }else{
+    pm.color=color; pm.marker.setLatLng(ll); pm.marker.setStyle({fillColor:color}); pm.marker.setTooltipContent(label);
+  }
+  pm.points.push(ll); if(pm.points.length>24)pm.points.shift();
+  drawTrail(pm);
+  const c=document.getElementById('mapCount'); if(c)c.textContent=Object.keys(posMarkers).length;
+  if(mapAuto&&!quiet)fitMap();
+}
+function fitMap(){
+  if(!lgmap)return;
+  const lls=Object.values(posMarkers).map(p=>p.marker.getLatLng());
+  if(lls.length===1)lgmap.setView(lls[0],13);
+  else if(lls.length>1){try{lgmap.fitBounds(L.latLngBounds(lls).pad(0.25));}catch(e){}}
+}
+{const _mf=document.getElementById('mapFit'); if(_mf)_mf.onclick=()=>{mapAuto=false;const a=document.getElementById('mapAuto');if(a)a.classList.remove('on');fitMap();};
+ const _ma=document.getElementById('mapAuto'); if(_ma)_ma.onclick=function(){mapAuto=!mapAuto;this.classList.toggle('on',mapAuto);if(mapAuto)fitMap();};
+ const _md=document.getElementById('mapDemo'); if(_md)_md.onclick=async function(){const on=!this.classList.contains('on');this.classList.toggle('on',on);this.textContent=on?'■ Demo':'▶ Demo';await j('/api/sim',{on});};}
+
+// ---------- System Scanner ----------
+let scanBandsRendered=false;
+async function renderScan(){
+  let st; try{st=await (await fetch('/api/scan/status')).json();}catch(e){return;}
+  if(!scanBandsRendered && st.bands){
+    document.getElementById('scanBands').innerHTML=Object.entries(st.bands).map(([k,lbl])=>
+      `<label title="${lbl}" style="margin-right:6px"><input type="checkbox" class="scanband" value="${k}" ${(k==='700'||k==='800f')?'checked':''}> ${k}</label>`).join('');
+    scanBandsRendered=true;
+  }
+  const pr=st.progress||{}; const mtag=st.mode==='discover'?'<span class="badge" style="background:#1f6feb;color:#fff">discover</span> ':'';
+  document.getElementById('scanStatus').innerHTML = st.running
+    ? `${mtag}<b style="color:#f0b429">⏳ SCANNING — live monitoring paused.</b> phase: <b>${st.phase}</b> · chunk ${pr.chunk||0}/${pr.chunks||0} · probed ${pr.cand||0}/${pr.cands||0} · discovered ${st.found.length}`
+    : (st.phase==='done'?`${mtag}✓ scan complete — ${st.found.length} system(s) discovered, ${(st.candidates||[]).length} carriers classified`
+      : (st.phase==='error'?`<span style="color:#ff4d4f">error: ${st.error}</span>`:'idle — pick band(s) and Scan, or use Prev/Next to step systems'));
+  document.getElementById('scanCands').innerHTML=(st.candidates||[]).map(c=>{
+    let tag; const cl=c.class||'';
+    if(c.present==='known'||cl==='known'||cl==='P25 (known)')tag='<span class="pill" title="matches a control channel already in your registry">known P25</span>';
+    else if(!cl)tag='<span class="mut">probing…</span>';
+    else{
+      let sty='';
+      if(cl==='P25')sty='background:#2da44e;color:#fff';
+      else if(cl==='DMR')sty='background:#a371f7;color:#fff';
+      else if(cl==='PAGING'||cl==='POCSAG'||cl==='FLEX'||cl.indexOf('PAGING')>=0)sty='background:#d29922;color:#1a1a1a';
+      else if(cl.indexOf('4-FSK')>=0)sty='background:#1f6feb;color:#fff';
+      else if(cl.indexOf('2-FSK')>=0||cl.indexOf('data')>=0)sty='background:#39506b;color:#cfe';
+      else if(cl.indexOf('ANALOG')>=0)sty='background:#6e7681;color:#fff';
+      else if(cl==='WEAK'||cl==='NO-SIG'||cl.indexOf('UNMOD')>=0)sty='background:#21262d;color:#8b949e';
+      tag=`<span class="badge" style="${sty}">${cl.replace(/</g,'&lt;')}</span>`;}
+    const bw=c.bw_khz?` <span class="mut">${c.bw_khz}k</span>`:'';
+    const msg=c.msgs?(' <span class="mono" style="color:#d29922" title="decoded page">'+(''+c.msgs).replace(/</g,'&lt;').slice(0,60)+'</span>'):'';
+    const det=(!c.msgs&&c.detail)?(' <span class="mut">'+(''+c.detail).replace(/</g,'&lt;').slice(0,52)+'</span>'):'';
+    return `<div class="dl"><span class="mono">${c.freq}${bw} <span class="mut">${c.power_db}dB</span></span><span style="text-align:right">${tag}${msg}${det}</span></div>`;
+  }).join('')||'<span class="mut">—</span>';
+  document.getElementById('scanFound').innerHTML=(st.found||[]).map(f=>
+    `<div class="dl"><span><b>${f.name}</b> <span class="mut">NAC ${f.nac} SYS ${f.sysid} · ${f.cc}</span> ${f.merged?'<span class="pill">site added</span>':'<span class="badge S">NEW</span>'}</span><button data-switch="${f.id}">monitor</button></div>`
+  ).join('')||'<span class="mut">none yet</span>';
+}
+document.getElementById('scanGo').onclick=async()=>{const bands=[...document.querySelectorAll('.scanband:checked')].map(x=>x.value);if(!bands.length){alert('pick at least one band');return;}const mode=document.getElementById('scanMode').value;await j('/api/scan/start',{bands,mode});setTimeout(renderScan,500);};
+document.getElementById('scanStop').onclick=async()=>{await j('/api/scan/stop',{});setTimeout(renderScan,500);};
+document.getElementById('scanPrev').onclick=async()=>{await j('/api/scan/next',{dir:'down'});setTimeout(renderScan,500);};
+document.getElementById('scanNext').onclick=async()=>{await j('/api/scan/next',{dir:'up'});setTimeout(renderScan,500);};
+document.getElementById('scanFound').addEventListener('click',e=>{const b=e.target.closest('[data-switch]');if(b){j('/api/switch',{id:b.dataset.switch}).then(()=>{BUF=[];activeCalls={};feed.innerHTML='';setTimeout(refresh,1500);});}});
+setInterval(renderScan,2000); renderScan();
+
+refresh();setInterval(refresh,2500);
+</script>
+</body>
+</html>
