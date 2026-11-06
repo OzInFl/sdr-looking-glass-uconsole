@@ -3,6 +3,9 @@
 SDR Looking Glass, uConsole edition. Versions follow [semver](https://semver.org); each release is a git tag
 `vX.Y.Z` with a GitHub Release. Clockwork Orange pins the version it installs in its `LOOKINGGLASS_VERSION`.
 
+## [1.0.1] - 2026-11-06
+- Diagnostics: an OP25 audio websocket closing is info, not a software error
+
 ## [1.0.0] - 2026-11-06
 First public release.
 - P25 trunk tracking on OP25 with an RTL-SDR (`SDR_KIND=rtl`): calls, live audio, Listen TG, Boost
