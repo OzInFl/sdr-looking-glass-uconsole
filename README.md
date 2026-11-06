@@ -59,6 +59,11 @@ never committed). Add systems with **Import** (RadioReference / CSV) or find the
 python3 dashboard/test_pocsag.py
 ```
 
+## Versions
+
+`VERSION` holds the current version (shown in the dashboard); releases are tagged `vX.Y.Z` with notes in
+[CHANGELOG.md](CHANGELOG.md) and on the GitHub Releases page.
+
 ## License
 
 MIT. OP25, GNU Radio, multimon-ng and rtl-sdr are separate projects under their own licenses.
