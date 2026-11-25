@@ -1011,7 +1011,9 @@ def parse_rr(text):
 # the selected ones, per-repeater mute) using the talkgroup the decoder just read, mixes, and plays it
 # on the uConsole's speaker with aplay (PipeWire). Settings live in the database, so any browser
 # (the uConsole window or a PC) controls the same speaker.
-import socket, base64
+import socket, base64, queue
+LISTENERS = set()              # browsers playing the same mix ("Play in this browser"): one queue each
+def _want(): return bool(SPK["on"] or LISTENERS)
 SPK_DEFAULT = {"on": False, "mode": "all", "tgs": [], "muted": [], "gain": 2.0}
 SPK = dict(SPK_DEFAULT)
 SPK_STATE = {"playing": {}, "err": None, "proc": None, "last_audio": 0.0}
@@ -1056,16 +1058,16 @@ def _ws_send(s, op, payload=b""):
 
 def _ws_reader(ch, port):
     """Feed one repeater's audio into its queue until the speaker is turned off or the port goes away."""
-    while SPK["on"] and RUN["on"] and RUN["chmap"] and ch < len(RUN["chmap"]):
+    while _want() and RUN["on"] and RUN["chmap"] and ch < len(RUN["chmap"]):
         try:
             s, buf = _ws_open(port); s.settimeout(2.0)
-            while SPK["on"] and RUN["on"]:
+            while _want() and RUN["on"]:
                 while len(buf) < 2:
                     try: c = s.recv(65536)
                     except socket.timeout: c = None
                     if c == b"": raise ConnectionError("closed")
                     if c: buf += c
-                    elif not (SPK["on"] and RUN["on"]): raise ConnectionError("stopping")
+                    elif not (_want() and RUN["on"]): raise ConnectionError("stopping")
                 op = buf[0] & 15; n = buf[1] & 127; hl = 2
                 if n == 126: hl = 4
                 elif n == 127: hl = 10
@@ -1148,12 +1150,13 @@ def speaker_loop():
     """Mixer: every 20 ms take one chunk from each repeater allowed to play, mix, write to aplay
     (its blocking write keeps real time). Readers start/stop with the speaker and with TRBO."""
     import numpy as np
-    readers = {}; last_pick = 0
+    readers = {}; last_pick = 0; clock = 0.0
     while True:
         try:
             if RUN["on"] and time.time() - last_pick > 0.1:
                 pick_slots(); last_pick = time.time()
-            if not (SPK["on"] and RUN["on"] and H["op25_running"]()):
+            if not SPK["on"] and SPK_STATE.get("proc"): _aplay_close()
+            if not (_want() and RUN["on"] and H["op25_running"]()):
                 _aplay_close(); SPK_STATE["playing"] = {}
                 with _AQL: _AQ.clear()
                 readers = {k: t for k, t in readers.items() if t.is_alive()}
@@ -1190,17 +1193,24 @@ def speaker_loop():
                 time.sleep(0.02); continue
             SPK_STATE["playing"] = playing; SPK_STATE["last_audio"] = now
             out = np.clip(mix * float(SPK["gain"]), -32768, 32767).astype("<i2").tobytes()
-            p = _aplay()
-            try: p.stdin.write(out); p.stdin.flush()
-            except Exception as e:
-                SPK_STATE["err"] = "speaker: %s (is the audio output available?)" % e; _aplay_close(); time.sleep(1)
+            for lq in list(LISTENERS):
+                try: lq.put_nowait(out)
+                except queue.Full: pass
+            if SPK["on"]:
+                p = _aplay()                                   # its blocking write keeps real time
+                try: p.stdin.write(out); p.stdin.flush()
+                except Exception as e:
+                    SPK_STATE["err"] = "speaker: %s (is the audio output available?)" % e; _aplay_close(); time.sleep(1)
+            else:                                              # browsers only: keep real time ourselves
+                clock = max(clock + 0.02, time.time() - 0.1)
+                time.sleep(max(0.0, clock - time.time()))
         except Exception as e:
             SPK_STATE["err"] = "speaker: %s" % e; time.sleep(1)
 
 def speaker_status():
     p = SPK_STATE.get("proc")
     return dict(SPK, playing=[{"freq": f, "tg": t, "tglabel": label("tg", t)} for f, t in SPK_STATE["playing"].items()],
-                open=bool(p and p.poll() is None), err=SPK_STATE["err"])
+                open=bool(p and p.poll() is None), err=SPK_STATE["err"], listeners=len(LISTENERS))
 
 # --------------------------------------------------------------------------------- web API
 def _range(a):
@@ -1267,6 +1277,22 @@ def register(app, hooks):
     def trbo_speaker():
         if request.method == "POST": speaker_set(request.get_json(force=True) or {})
         return jsonify(speaker_status())
+
+    @app.route("/api/trbo/audio.pcm")
+    def trbo_audio():
+        """'Play in this browser': the same filtered mix the uConsole speaker plays, as raw 8 kHz
+        16-bit mono PCM over a long HTTP response. A 20 ms block of silence every 5 s while quiet
+        lets us notice a browser that went away."""
+        lq = queue.Queue(maxsize=250); LISTENERS.add(lq)
+        def gen():
+            try:
+                while True:
+                    try: yield lq.get(timeout=5)
+                    except queue.Empty: yield b"\0" * CHUNK
+            finally:
+                LISTENERS.discard(lq)
+        return Response(gen(), mimetype="application/octet-stream",
+                        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
 
     @app.route("/api/trbo/plan", methods=["POST"])
     def trbo_plan(): return jsonify({"windows": plan(_norm_site(request.get_json(force=True) or {}))})

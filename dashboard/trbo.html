@@ -140,6 +140,7 @@
   <span class="spacer"></span>
   <span class="hstat"><span>today <b id="hcalls">0</b> calls · <b id="hair">0:00</b> air</span><span><b id="hpos">0</b> GPS fixes</span></span>
   <button id="spkBtn" class="sm" title="Play decoded voice on the uConsole speaker">🔈 Speaker off</button>
+  <button id="brBtn" class="sm" title="Play the same audio in this browser">🎧 Browser off</button>
   <button id="startBtn" class="go">Start monitoring</button>
   <a href="/" title="Open the P25 Looking Glass dashboard"><button class="sm">P25</button></a>
 </header>
@@ -162,10 +163,14 @@
         <div class="pbody"><div class="chgrid" id="chgrid"></div></div></div>
     </div>
     <div>
-      <div class="panel" id="spkPanel"><div class="phead"><span>uConsole speaker</span><span class="r small muted" id="spkNow"></span></div>
+      <div class="panel" id="spkPanel"><div class="phead"><span>Audio</span><span class="r small muted" id="spkNow"></span></div>
         <div class="pbody">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+            <span class="small muted" style="width:120px">uConsole speaker</span><button id="spkToggle" class="sm">Off</button></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+            <span class="small muted" style="width:120px">This browser</span><button id="brToggle" class="sm">Off</button><span class="small muted" id="brStat"></span></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-            <button id="spkToggle" class="sm">Off</button>
+            <span class="small muted" style="width:120px">Both play</span>
             <select id="spkMode"><option value="all">All talkgroups</option><option value="selected">Only selected talkgroups</option></select>
             <label class="small muted">volume <select id="spkGain"><option value="1">×1</option><option value="2">×2</option><option value="4">×4</option><option value="6">×6</option></select></label>
           </div>
@@ -173,6 +178,7 @@
           <div style="display:flex;gap:6px;margin-top:6px;align-items:center"><input id="spkAdd" list="tgList" placeholder="add talkgroup" style="width:160px"><datalist id="tgList"></datalist>
             <button class="sm" id="spkAddBtn">Add</button><span class="small muted">or tap 🔈 next to a talkgroup</span></div>
           <div class="small" id="spkErr"></div>
+          <div class="small muted" style="margin-top:4px">🎧 on a repeater card plays just that repeater in this browser (all its talkgroups).</div>
         </div></div>
       <div class="panel"><div class="phead"><span>Recent transmissions</span><span class="r small muted">newest first</span></div>
         <div class="feed"><table><thead><tr><th>time</th><th>channel</th><th>talkgroup</th><th>radio</th><th class="r">sec</th></tr></thead><tbody id="recent"></tbody></table></div></div>
@@ -387,7 +393,8 @@ function renderLive(){
     else if(c.cc_seen!=null)badges+='<span class="badge">CC '+c.cc_seen+'</span>';
     if(c.keyed)badges+='<span class="badge live">on air</span>';
     const SP=L.speaker||{};const muted=(SP.muted||[]).includes(c.freq);const nowp=(SP.playing||[]).some(p=>p.freq===c.freq);
-    const lis=c.monitored&&c.audio_port?('<button class="sm'+(nowp?' on':'')+'" data-spkmute="'+c.freq+'" title="uConsole speaker: '+(muted?'muted, tap to unmute':'tap to mute this repeater')+'">'+(muted?'🔇':'🔈')+'</button>'+
+    const isCC=c.keyed&&!c.slots.some(x=>x.active)&&/control/i.test(c.label||'');
+    const lis=isCC?'<span class="small muted" title="Control channels carry signalling, never voice">no voice</span>':c.monitored&&c.audio_port?('<button class="sm'+(nowp?' on':'')+'" data-spkmute="'+c.freq+'" title="uConsole speaker: '+(muted?'muted, tap to unmute':'tap to mute this repeater')+'">'+(muted?'🔇':'🔈')+'</button>'+
       '<button class="sm'+(audioPort===c.audio_port?' on':'')+'" data-listen="'+c.audio_port+'" title="Listen in this browser">🎧</button>'):'';
     const slots=c.mode!=='dmr'?'':c.slots.map(s=>{
       if(s.active){const fl=(s.enc?'<span class="badge enc">🔒 enc</span> ':'')+(s.emerg?'<span class="badge em">⚠ EMERG</span> ':'');
@@ -407,13 +414,15 @@ async function setSpk(patch){const S=Object.assign({},(LIVE&&LIVE.speaker)||{},p
 function renderSpk(){const S=(LIVE&&LIVE.speaker)||{};
   const b=$('#spkBtn');b.textContent=S.on?'🔊 Speaker on':'🔈 Speaker off';b.className='sm'+(S.on?' on':'');
   const t=$('#spkToggle');t.textContent=S.on?'On, tap to turn off':'Off, tap to turn on';t.className='sm'+(S.on?' on':'');
+  const bb=$('#brBtn');bb.textContent=BR.on?'🎧 Browser on':'🎧 Browser off';bb.className='sm'+(BR.on?' on':'');
+  const bt=$('#brToggle');bt.textContent=BR.on?'On, tap to turn off':'Off, tap to turn on';bt.className='sm'+(BR.on?' on':'');if(!BR.on)$('#brStat').textContent='';
   if(document.activeElement!==$('#spkMode'))$('#spkMode').value=S.mode||'all';
   if(document.activeElement!==$('#spkGain'))$('#spkGain').value=String(+(S.gain||2));
   const sel=(S.tgs||[]);
   $('#spkSel').innerHTML=(S.mode==='selected'?'<div class="small muted" style="margin-bottom:4px">Plays only these talkgroups:</div>':'<div class="small muted" style="margin-bottom:4px">Playing every talkgroup. Pick talkgroups below, then choose "Only selected talkgroups":</div>')+
     (sel.length?sel.map(tg=>'<span class="pill" style="font-family:inherit;font-size:12px;padding:2px 6px">'+(TGL[tg]?esc(TGL[tg])+' ':'')+'<span class="mono muted">'+tg+'</span> <a href="#" data-spkrm="'+tg+'" style="text-decoration:none">✕</a></span>').join(' '):'<span class="small muted">none selected</span>')+
     ((S.muted||[]).length?'<div class="small muted" style="margin-top:4px">Muted repeaters: '+S.muted.map(f=>'<span class="pill">'+f.replace(/0+$/,'')+' <a href="#" data-spkmute="'+f+'" style="text-decoration:none">✕</a></span>').join(' ')+'</div>':'');
-  const p=S.playing||[];$('#spkNow').innerHTML=S.on?(p.length?'▶ '+p.map(x=>esc(x.tglabel||(x.tg!=null?'TG '+x.tg:x.freq))).join(', '):'listening'):'';
+  const p=S.playing||[];$('#spkNow').innerHTML=(S.on||BR.on)?(p.length?'▶ '+p.map(x=>esc(x.tglabel||(x.tg!=null?'TG '+x.tg:x.freq))).join(', '):'listening'):'';
   $('#spkErr').innerHTML=S.err?'<span class="stat-bad">'+esc(S.err)+'</span>':'';
 }
 let TGL={};
@@ -428,15 +437,37 @@ document.addEventListener('click',e=>{const S=(LIVE&&LIVE.speaker)||{};
   const a=e.target.closest('[data-spktg]');if(a){const tg=+a.dataset.spktg;const set=new Set(S.tgs||[]);set.has(tg)?set.delete(tg):set.add(tg);setSpk({tgs:[...set]});return;}
   const r=e.target.closest('[data-spkrm]');if(r){e.preventDefault();setSpk({tgs:(S.tgs||[]).filter(t=>t!==+r.dataset.spkrm)});return;}
   const m=e.target.closest('[data-spkmute]');if(m){e.preventDefault();const f=m.dataset.spkmute;const set=new Set(S.muted||[]);set.has(f)?set.delete(f):set.add(f);setSpk({muted:[...set]});}});
-/* audio in this browser: OP25 streams 8 kHz 16-bit PCM per channel on ws://host:port */
+/* "Play in this browser": the service streams the same filtered mix as the speaker (8 kHz s16le) */
+let ACTX=null;
+function actx(){if(!ACTX)ACTX=new (window.AudioContext||window.webkitAudioContext)();if(ACTX.state==='suspended')ACTX.resume();return ACTX;}  // browser's own rate; 8 kHz buffers are resampled
+function pcmPlayer(){return {next:0,carry:null,bytes:0,last:0,
+  play(u8){let b=u8;if(this.carry){const t=new Uint8Array(this.carry.length+b.length);t.set(this.carry);t.set(b,this.carry.length);b=t;this.carry=null;}
+    if(b.length%2){this.carry=b.slice(b.length-1);b=b.slice(0,b.length-1);}if(!b.length)return;
+    const s=new Int16Array(b.slice().buffer);let loud=false;for(let i=0;i<s.length;i+=8)if(s[i]){loud=true;break;}if(!loud)return;   // keepalive silence
+    this.bytes+=b.length;this.last=Date.now();const c=actx();const buf=c.createBuffer(1,s.length,8000);const ch=buf.getChannelData(0);
+    for(let i=0;i<s.length;i++)ch[i]=s[i]/32768;const src=c.createBufferSource();src.buffer=buf;src.connect(c.destination);
+    const now=c.currentTime;if(this.next<now||this.next>now+2)this.next=now+0.25;src.start(this.next);this.next+=buf.duration;}};}
+const BR={on:false,ctrl:null,p:null,err:null};
+async function browserAudio(on){
+  BR.on=on;if(!on){if(BR.ctrl)try{BR.ctrl.abort();}catch(e){}renderSpk();return;}
+  actx();BR.p=pcmPlayer();BR.err=null;renderSpk();
+  while(BR.on){
+    try{BR.ctrl=new AbortController();const r=await fetch('/api/trbo/audio.pcm',{signal:BR.ctrl.signal,cache:'no-store'});
+      const rd=r.body.getReader();while(BR.on){const {value,done}=await rd.read();if(done)break;BR.p.play(value);}}
+    catch(e){if(!BR.on)break;BR.err=String(e);}
+    if(BR.on)await new Promise(r=>setTimeout(r,2000));
+  }
+}
+$('#brBtn').onclick=$('#brToggle').onclick=()=>browserAudio(!BR.on);
+setInterval(()=>{if(!BR.on)return;const a=BR.p&&BR.p.last&&Date.now()-BR.p.last<1500;$('#brStat').textContent=a?'▶ playing':(BR.err?'reconnecting…':'connected, waiting for voice');},500);
+/* 🎧 one repeater in this browser: OP25 streams 8 kHz 16-bit PCM per repeater on ws://host:port */
 document.addEventListener('click',e=>{const b=e.target.closest('[data-listen]');if(!b)return;const p=+b.dataset.listen;
   if(audioWs){try{audioWs.close();}catch(x){}audioWs=null;}
   if(audioPort===p){audioPort=null;renderLive();return;}
-  audioPort=p;if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)({sampleRate:8000});audioCtx.resume();
+  audioPort=p;actx();const pl=pcmPlayer();
   const w=new WebSocket('ws://'+location.hostname+':'+p);w.binaryType='arraybuffer';audioWs=w;
-  w.onmessage=ev=>{if(typeof ev.data==='string')return;const s=new Int16Array(ev.data);const buf=audioCtx.createBuffer(1,s.length,8000);const ch=buf.getChannelData(0);
-    for(let i=0;i<s.length;i++)ch[i]=Math.max(-1,Math.min(1,s[i]/32768*3));const src=audioCtx.createBufferSource();src.buffer=buf;src.connect(audioCtx.destination);
-    const now=audioCtx.currentTime;if(audioNext<now)audioNext=now+0.05;src.start(audioNext);audioNext+=buf.duration;};
+  w.onmessage=ev=>{if(typeof ev.data==='string')return;const s=new Int16Array(ev.data);for(let i=0;i<s.length;i++)s[i]=Math.max(-32768,Math.min(32767,s[i]*2));pl.play(new Uint8Array(s.buffer));};
+  w.onerror=()=>{audioPort=null;renderLive();alert('Could not connect to the audio stream on port '+p+'.');};
   renderLive();});
 
 /* ---------------- TRAFFIC */
