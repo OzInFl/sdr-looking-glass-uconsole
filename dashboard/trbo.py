@@ -379,7 +379,7 @@ def feed(line):
         return
     t = _ts(m); ch = int(m.group(8)); rest = m.group(9)
     with LOCK:
-        RUN["lines"] += 1
+        RUN["lines"] += 1; RUN["last_line"] = time.time()
         c = CHS.get(ch)
         if c is None: return
         sm = SLOTRE.match(rest)
@@ -393,6 +393,12 @@ def feed(line):
         em = EMBRAW.match(rest)
         if em: _emb_raw(ch, em, t); return
         if rest.startswith("SLCO="): _keyed(ch, c, t)
+
+ERRORS = collections.deque(maxlen=20)
+def note_error(e, line=""):
+    """A line we could not handle: count it, keep the last few for Data & control, never stop reading."""
+    COUNTS["parse_errors"] += 1
+    ERRORS.appendleft({"t": time.time(), "err": "%s: %s" % (type(e).__name__, e), "line": (line or "")[:160]})
 
 def _keyed(ch, c, t):
     c["frames"] += 1
@@ -771,7 +777,12 @@ def tick():
                     c.executemany("INSERT INTO coverage(site,freq,minute,mon,keyed,data) VALUES(?,?,?,?,?,?) "
                                   "ON CONFLICT(site,freq,minute) DO UPDATE SET mon=mon+excluded.mon, keyed=keyed+excluded.keyed, data=data+excluded.data", rows)
                     c.commit()
-            if running and len(RUN["wins"]) > len(RUN["assign"]):
+            if RUN["on"] and active() and now - RUN["started"] > 60 and now - max(RUN.get("last_line") or 0, RUN["started"]) > 45:
+                COUNTS["stall_restarts"] += 1
+                ERRORS.appendleft({"t": now, "err": "no decoder output for 45 s: restarted OP25", "line": ""})
+                RUN["started"] = now
+                threading.Thread(target=H["op25_start"], daemon=True).start()
+            elif running and len(RUN["wins"]) > len(RUN["assign"]):
                 site = active_site() or {}
                 if now - RUN["rot_at"] >= float(site.get("dwell") or 300):
                     RUN["rot"] = (RUN["rot"] + len(RUN["assign"])) % len(RUN["wins"]); RUN["rot_at"] = now
@@ -814,7 +825,7 @@ def live():
                 "next_rotate": (RUN["rot_at"] + float((site or {}).get("dwell") or 300) - now) if len(wins) > len(RUN["assign"]) else None,
                 "devices": [d["args"] for d in RUN["devices"]], "channels": chans,
                 "recent": list(RECENT)[:60], "grants": list(GRANTS_R)[:60], "data": list(DATA_R)[:60],
-                "counts": dict(COUNTS), "unhandled": dict(UNK.most_common(12)), "lines": RUN["lines"], "speaker": speaker_status(),
+                "counts": dict(COUNTS), "unhandled": dict(UNK.most_common(12)), "lines": RUN["lines"], "speaker": speaker_status(), "errors": list(ERRORS)[:10],
                 "lpcn": [{"lpcn": r[0], "freq": r[1], "how": r[2]} for r in q("SELECT lpcn,freq,how FROM lpcn WHERE site=? ORDER BY lpcn", (RUN["site"] or "",))]}
 
 # --------------------------------------------------------------------------------- statistics

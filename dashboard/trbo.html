@@ -623,7 +623,8 @@ async function loadData(){
 }
 function renderCounters(){if(!LIVE)return;const c=LIVE.counts||{};
   $('#counters').innerHTML=Object.entries(c).sort((a,b)=>b[1]-a[1]).map(([k,v])=>esc(k)+': '+v).join('<br>')+
-    (Object.keys(LIVE.unhandled||{}).length?'<br><br><span class="muted">not decoded: '+Object.entries(LIVE.unhandled).map(([k,v])=>esc(k)+' ×'+v).join(', ')+'</span>':'')+'<br><br><span class="muted">'+LIVE.lines+' decoder lines</span>';}
+    (Object.keys(LIVE.unhandled||{}).length?'<br><br><span class="muted">not decoded: '+Object.entries(LIVE.unhandled).map(([k,v])=>esc(k)+' ×'+v).join(', ')+'</span>':'')+'<br><br><span class="muted">'+LIVE.lines+' decoder lines</span>'+
+    ((LIVE.errors||[]).length?'<br><br><span class="stat-warn">recent problems:</span><br>'+LIVE.errors.map(e=>tm(e.t)+' '+esc(e.err)+(e.line?' <span class="muted">'+esc(e.line)+'</span>':'')).join('<br>'):'');}
 
 /* ---------------- SETUP */
 let SITES=[], ED=null, RTLS=[];

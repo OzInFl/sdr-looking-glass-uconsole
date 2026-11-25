@@ -1185,12 +1185,18 @@ def _reader(p):
                 try: lf.write(line)
                 except Exception: pass
             if OP25.get("trbo"):
-                trbo.feed(line)
+                try: trbo.feed(line)
+                except Exception as e: trbo.note_error(e, line)
                 continue
-            parse_line(line)
-            if "(0x" not in line[:60]: xlog_line(line)
-    except Exception:
-        pass
+            try:
+                parse_line(line)
+                if "(0x" not in line[:60]: xlog_line(line)
+            except Exception:
+                pass
+    except Exception as e:
+        OP25["reader_error"] = "%s: %s" % (type(e).__name__, e)
+        try: trbo.note_error(e, "(OP25 output reader stopped)")
+        except Exception: pass
     finally:
         if lf:
             try: lf.close()
@@ -1212,7 +1218,7 @@ def _op25_start():
             cfg = trbo.build_cfg()
             env = dict(os.environ); env["PYTHONPATH"] = HERE + os.pathsep + env.get("PYTHONPATH", "")   # tk_lgslot.py lives here
             p = subprocess.Popen([OP25_PY, "multi_rx.py", "-v", "10", "-c", cfg], env=env,
-                                 cwd=APPS, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+                                 cwd=APPS, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace", bufsize=1)
             OP25.update(proc=p, running=True, error=None, since=time.time(), trbo=True); trbo.RUN["on"] = True
             threading.Thread(target=_reader, args=(p,), daemon=True).start()
         except Exception as e:
@@ -1226,7 +1232,7 @@ def _op25_start():
         cfg = build_cfg(sid)
         p = subprocess.Popen([OP25_PY, "multi_rx.py", "-v", "10", "-c", cfg],
                              cwd=APPS, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                             text=True, bufsize=1)
+                             text=True, errors="replace", bufsize=1)
         OP25["proc"] = p; OP25["running"] = True; OP25["error"] = None; OP25["since"] = time.time()
         threading.Thread(target=_reader, args=(p,), daemon=True).start()
     except Exception as e:
@@ -1364,7 +1370,7 @@ def _probe_one(freq_mhz, sdr):
     res = {"freq": round(freq_mhz, 5), "present": False}
     try:
         p = subprocess.Popen([OP25_PY, "multi_rx.py", "-v", "10", "-c", _build_probe_cfg(freq_mhz, sdr)],
-                             cwd=APPS, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+                             cwd=APPS, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace", bufsize=1)
     except Exception as e:
         res["error"] = str(e); return res
     rt = threading.Thread(target=lambda: [parse_line(l) for l in p.stdout], daemon=True); rt.start()
@@ -1418,7 +1424,7 @@ def _probe_dmr_one(freq_mhz, sdr):
     res = {"freq": round(freq_mhz, 5), "present": False}
     try:
         p = subprocess.Popen([OP25_PY, "multi_rx.py", "-v", "10", "-c", _build_dmr_probe_cfg(freq_mhz, sdr)],
-                             cwd=APPS, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+                             cwd=APPS, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace", bufsize=1)
     except Exception as e:
         res["error"] = str(e); return res
     rt = threading.Thread(target=lambda: [parse_line(l) for l in p.stdout], daemon=True); rt.start()
@@ -1759,7 +1765,7 @@ def _run_data_probe(freq_mhz, secs=75):
     op25_stop(); time.sleep(0.6); reset_state()
     try:
         p = subprocess.Popen([OP25_PY, "multi_rx.py", "-v", "10", "-c", _build_data_probe_cfg(freq_mhz, sdr, mod)],
-                             cwd=APPS, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+                             cwd=APPS, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace", bufsize=1)
     except Exception as e:
         PROBE_DATA.update({"running": False, "result": {"error": str(e), "verdict": "error"}})
         _scan_pub("PROBE", phase="done", verdict="error", freq=round(freq_mhz, 5))
