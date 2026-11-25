@@ -8,3 +8,4 @@ dashboard/tags.json
 dashboard/rids.json
 *.bak
 *.log
+dashboard/trbo.db*

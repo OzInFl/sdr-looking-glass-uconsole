@@ -1,0 +1,701 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TRBO Monitor · SDR Looking Glass</title>
+<link rel="stylesheet" href="/vendor/leaflet/leaflet.css"/>
+<script src="/vendor/leaflet/leaflet.js"></script>
+<style>
+  :root{--bg:#0a0e14;--panel:#121826;--panel2:#0f1521;--line:#232c3d;--fg:#dbe3ef;--mut:#7d8aa0;--acc:#38bdf8;
+        --data:#338ced;--good:#0aac23;--warn:#fbb315;--serious:#f18a59;--crit:#dc3c3d;--enc:#f0b429;--emerg:#ff4d4f}
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:radial-gradient(1200px 600px at 70% -10%,#13203a 0%,var(--bg) 55%);color:var(--fg);
+       font:13px/1.45 system-ui,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column}
+  .mono,.num{font-family:ui-monospace,Consolas,monospace}
+  .num{font-variant-numeric:tabular-nums}
+  a{color:var(--acc)}
+  select,input,button,textarea{background:#0b111c;border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:5px 9px;font:inherit;outline:none}
+  select:focus,input:focus,textarea:focus{border-color:var(--acc)}
+  button{cursor:pointer}
+  button:hover{border-color:var(--acc)}
+  button.go{background:linear-gradient(180deg,#2ea043,#238636);border-color:#2ea043;color:#fff}
+  button.stop{background:#7a2b2b;border-color:#9a3a3a;color:#fff}
+  button.on{background:rgba(56,189,248,.18);border-color:rgba(56,189,248,.6);color:#fff}
+  button.sm{padding:2px 8px;font-size:12px}
+  header{padding:8px 14px;background:linear-gradient(180deg,#0b1322,#080c14);border-bottom:1px solid var(--line);
+         display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:15px;margin:0;letter-spacing:1.5px;font-weight:700;background:linear-gradient(90deg,#67e8f9,#38bdf8);
+            -webkit-background-clip:text;background-clip:text;color:transparent;white-space:nowrap}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--crit);display:inline-block;margin-right:6px}
+  .dot.on{background:#36d399;box-shadow:0 0 10px #36d399}
+  .hstat{color:var(--mut);font-size:12px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  .hstat b{color:var(--fg)}
+  .spacer{flex:1}
+  nav{display:flex;gap:2px;padding:6px 14px 0;border-bottom:1px solid var(--line);background:rgba(13,19,32,.6);overflow-x:auto}
+  nav button{border:1px solid transparent;border-bottom:none;border-radius:8px 8px 0 0;background:transparent;color:var(--mut);padding:7px 14px;font-size:13px}
+  nav button.active{background:var(--panel);border-color:var(--line);color:#fff}
+  main{flex:1;overflow:auto;padding:12px 14px 20px}
+  .view{display:none}.view.active{display:block}
+  .panel{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:12px}
+  .phead{font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--mut);padding:8px 12px;border-bottom:1px solid var(--line);
+         background:rgba(255,255,255,.02);display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+  .phead .r{display:flex;gap:6px;align-items:center;text-transform:none;letter-spacing:0}
+  .pbody{padding:10px 12px}
+  .grid2{display:grid;grid-template-columns:1.5fr 1fr;gap:12px;align-items:start}
+  @media (max-width:1100px){.grid2{grid-template-columns:1fr}}
+  .muted{color:var(--mut)} .small{font-size:11px}
+  .empty{color:var(--mut);padding:18px;text-align:center}
+  .warnbox{border:1px solid rgba(251,179,21,.45);background:rgba(251,179,21,.08);border-radius:8px;padding:8px 10px;margin:8px 0;color:#f6d488}
+  .errbox{border:1px solid rgba(220,60,61,.5);background:rgba(220,60,61,.1);border-radius:8px;padding:8px 10px;margin:8px 0;color:#ffb3b3}
+  .okbox{border:1px solid rgba(10,172,35,.45);background:rgba(10,172,35,.08);border-radius:8px;padding:8px 10px;margin:8px 0}
+  /* channel cards */
+  .chgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px}
+  .ch{border:1px solid var(--line);border-radius:10px;background:#0d1320;overflow:hidden}
+  .ch.keyed{border-color:rgba(56,189,248,.55);box-shadow:0 0 0 1px rgba(56,189,248,.2) inset}
+  .ch.off{opacity:.55}
+  .chh{display:flex;align-items:baseline;gap:8px;padding:7px 10px;border-bottom:1px solid var(--line)}
+  .chh .f{font-family:ui-monospace,monospace;font-weight:700;font-size:14px}
+  .chh .l{color:var(--mut);font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .badge{font-size:10px;border:1px solid var(--line);border-radius:10px;padding:1px 7px;color:var(--mut);white-space:nowrap}
+  .badge.w{border-color:rgba(251,179,21,.6);color:var(--warn)}
+  .badge.enc{border-color:rgba(240,180,41,.7);color:var(--enc)}
+  .badge.em{border-color:var(--emerg);color:var(--emerg)}
+  .badge.live{border-color:rgba(56,189,248,.7);color:var(--acc)}
+  .slot{display:grid;grid-template-columns:34px 1fr auto;gap:8px;align-items:center;padding:6px 10px;border-bottom:1px solid rgba(255,255,255,.04);min-height:44px}
+  .slot:last-child{border-bottom:none}
+  .slot .ts{font-size:11px;color:var(--mut);font-weight:700}
+  .slot.act{background:rgba(56,189,248,.10)}
+  .slot.act .ts{color:var(--acc)}
+  .slot.hang{background:rgba(125,138,160,.07)}
+  .slot .who{line-height:1.25;min-width:0}
+  .slot .who .tg{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .slot .who .rid{font-size:11px;color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .slot .tmr{font-family:ui-monospace,monospace;font-size:13px}
+  /* tables */
+  table{border-collapse:collapse;width:100%}
+  th,td{padding:5px 8px;border-bottom:1px solid rgba(255,255,255,.05);text-align:left;vertical-align:middle}
+  th{font-size:11px;color:var(--mut);font-weight:600;text-transform:uppercase;letter-spacing:.6px;position:sticky;top:0;background:#101624;z-index:1;cursor:default;white-space:nowrap}
+  th.sort{cursor:pointer} th.sort:hover{color:var(--fg)}
+  td.r,th.r{text-align:right}
+  tr:hover td{background:rgba(255,255,255,.025)}
+  .scroll{max-height:62vh;overflow:auto}
+  .feed{max-height:36vh;overflow:auto}
+  .feed table td{font-size:12px}
+  .lbl{cursor:pointer;border-bottom:1px dotted rgba(125,138,160,.5)}
+  .lbl:hover{color:#fff}
+  .share{display:inline-block;height:8px;border-radius:0 4px 4px 0;background:var(--data);vertical-align:middle;margin-right:6px;min-width:1px}
+  /* KPI tiles */
+  .kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:12px}
+  .kpi{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  .kpi .v{font-size:22px;font-weight:700;font-family:ui-monospace,monospace;line-height:1.1}
+  .kpi .k{color:var(--mut);font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-top:4px}
+  .kpi .s{color:var(--mut);font-size:11px;margin-top:2px}
+  .filters{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+  .filters .sep{width:1px;height:22px;background:var(--line);margin:0 4px}
+  /* charts */
+  .chart{position:relative}
+  .chart svg{display:block;width:100%;overflow:visible}
+  .axis text{fill:var(--mut);font-size:10px;font-family:system-ui,sans-serif}
+  .axis line,.axis path{stroke:#2a3447}
+  .gridl{stroke:rgba(255,255,255,.06)}
+  .tip{position:fixed;pointer-events:none;background:#0b111c;border:1px solid #33405a;border-radius:8px;padding:7px 9px;font-size:12px;
+       z-index:1000;display:none;box-shadow:0 8px 24px rgba(0,0,0,.5);max-width:280px}
+  .tip b{color:#fff}
+  .legend{display:flex;gap:6px;align-items:center;color:var(--mut);font-size:11px;margin-top:6px}
+  .legend .ramp{display:inline-block;width:120px;height:8px;border-radius:2px;background:linear-gradient(90deg,#16233a,#0e3d7e,#1b64be,#338ced,#84b9f3,#cce3fd)}
+  /* bars (channel util) */
+  .ubar{display:grid;grid-template-columns:200px 1fr 64px;gap:8px;align-items:center;padding:4px 0}
+  .ubar .n{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ubar .t{height:14px;background:rgba(255,255,255,.04);border-radius:0 4px 4px 0;position:relative}
+  .ubar .t i{position:absolute;left:0;top:0;bottom:0;background:var(--data);border-radius:0 4px 4px 0}
+  .ubar .t u{position:absolute;top:-2px;bottom:-2px;width:2px;background:#cce3fd;opacity:.85}
+  .ubar .v{text-align:right;font-family:ui-monospace,monospace;font-size:12px}
+  /* map */
+  #map{height:calc(100vh - 210px);min-height:360px;background:#0a0f17}
+  .leaflet-container{background:#0a0f17}
+  .rlabel{background:rgba(11,17,28,.85);border:1px solid #33405a;color:#dbe3ef;font-size:11px;padding:1px 5px;border-radius:5px;white-space:nowrap}
+  /* setup */
+  .form{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px 12px}
+  .form label{display:block;font-size:11px;color:var(--mut);margin-bottom:2px}
+  .form input,.form select{width:100%}
+  .chedit input{width:100%;padding:3px 6px}
+  .chedit td{padding:3px 4px}
+  textarea{width:100%;min-height:110px;font-family:ui-monospace,monospace;font-size:12px}
+  .win{border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin:6px 0;font-size:12px}
+  .win.mon{border-color:rgba(56,189,248,.5)}
+  .pill{display:inline-block;font-family:ui-monospace,monospace;font-size:11px;border:1px solid var(--line);border-radius:5px;padding:0 5px;margin:1px 2px}
+  .sitecard{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:8px;display:flex;gap:10px;align-items:center}
+  .sitecard.act{border-color:rgba(54,211,153,.6);background:rgba(54,211,153,.05)}
+  .sitecard .n{font-weight:600}
+  .stat-ok{color:var(--good)} .stat-warn{color:var(--warn)} .stat-bad{color:var(--crit)}
+</style>
+</head>
+<body>
+<header>
+  <h1>TRBO MONITOR</h1>
+  <span class="hstat"><span><span class="dot" id="hdot"></span><b id="hrun">stopped</b></span>
+    <span style="display:inline-flex;gap:4px;min-width:0">site <b id="hsite" style="display:inline-block;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom">—</b></span><span id="hwin"></span><span id="hrot"></span></span>
+  <span class="spacer"></span>
+  <span class="hstat"><span>today <b id="hcalls">0</b> calls · <b id="hair">0:00</b> air</span><span><b id="hpos">0</b> GPS fixes</span></span>
+  <button id="spkBtn" class="sm" title="Play decoded voice on the uConsole speaker">🔈 Speaker off</button>
+  <button id="startBtn" class="go">Start monitoring</button>
+  <a href="/" title="Open the P25 Looking Glass dashboard"><button class="sm">P25</button></a>
+</header>
+<nav id="tabs">
+  <button data-v="live" class="active">Live</button>
+  <button data-v="traffic">Traffic &amp; usage</button>
+  <button data-v="map">Map</button>
+  <button data-v="calls">Call log</button>
+  <button data-v="radios">Radios</button>
+  <button data-v="data">Data &amp; control</button>
+  <button data-v="setup">Setup</button>
+</nav>
+<main>
+<!-- ============================== LIVE -->
+<section class="view active" id="v-live">
+  <div id="liveMsg"></div>
+  <div class="grid2">
+    <div>
+      <div class="panel"><div class="phead"><span>Channels</span><span class="r small muted" id="chNote"></span></div>
+        <div class="pbody"><div class="chgrid" id="chgrid"></div></div></div>
+    </div>
+    <div>
+      <div class="panel" id="spkPanel"><div class="phead"><span>uConsole speaker</span><span class="r small muted" id="spkNow"></span></div>
+        <div class="pbody">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <button id="spkToggle" class="sm">Off</button>
+            <select id="spkMode"><option value="all">All talkgroups</option><option value="selected">Only selected talkgroups</option></select>
+            <label class="small muted">volume <select id="spkGain"><option value="1">×1</option><option value="2">×2</option><option value="4">×4</option><option value="6">×6</option></select></label>
+          </div>
+          <div id="spkSel" style="margin-top:8px"></div>
+          <div style="display:flex;gap:6px;margin-top:6px;align-items:center"><input id="spkAdd" list="tgList" placeholder="add talkgroup" style="width:160px"><datalist id="tgList"></datalist>
+            <button class="sm" id="spkAddBtn">Add</button><span class="small muted">or tap 🔈 next to a talkgroup</span></div>
+          <div class="small" id="spkErr"></div>
+        </div></div>
+      <div class="panel"><div class="phead"><span>Recent transmissions</span><span class="r small muted">newest first</span></div>
+        <div class="feed"><table><thead><tr><th>time</th><th>channel</th><th>talkgroup</th><th>radio</th><th class="r">sec</th></tr></thead><tbody id="recent"></tbody></table></div></div>
+      <div class="panel" id="grantPanel" style="display:none"><div class="phead"><span>Control channel grants (Capacity Max)</span><span class="r small muted">one per PTT</span></div>
+        <div class="feed"><table><thead><tr><th>time</th><th>type</th><th>to</th><th>from</th><th>LPCN/TS</th></tr></thead><tbody id="grants"></tbody></table></div></div>
+      <div class="panel"><div class="phead"><span>Data (GPS, registrations, texts)</span></div>
+        <div class="feed"><table><thead><tr><th>time</th><th>radio</th><th>what</th></tr></thead><tbody id="ldata"></tbody></table></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== TRAFFIC -->
+<section class="view" id="v-traffic">
+  <div class="filters" id="rangeBar">
+    <span class="muted small">Period</span>
+    <button class="sm" data-r="3600">1 h</button><button class="sm" data-r="21600">6 h</button>
+    <button class="sm on" data-r="86400">24 h</button><button class="sm" data-r="604800">7 days</button>
+    <button class="sm" data-r="2592000">30 days</button><button class="sm" data-r="0">All</button>
+    <span class="sep"></span>
+    <input type="datetime-local" id="rFrom"> <span class="muted">to</span> <input type="datetime-local" id="rTo">
+    <button class="sm" id="rApply">Apply</button>
+    <span class="sep"></span>
+    <select id="exportSel"><option value="">Export CSV…</option><option value="calls">Every transmission</option>
+      <option value="talkgroups">Talkgroup summary</option><option value="channels">Channel / slot utilization</option>
+      <option value="hourly">Hourly load</option><option value="positions">GPS positions</option><option value="data">Data messages</option></select>
+    <button class="sm" id="rRefresh">Refresh</button>
+  </div>
+  <div id="covNote"></div>
+  <div class="kpis" id="kpis"></div>
+  <div class="panel"><div class="phead"><span>Load per hour (Erlangs = average simultaneous transmissions)</span><span class="r small muted" id="seriesNote"></span></div>
+    <div class="pbody"><div class="chart" id="hourChart"></div></div></div>
+  <div class="grid2">
+    <div class="panel"><div class="phead"><span>Repeater / timeslot utilization</span><span class="r small muted">bar = average · tick = busiest hour</span></div>
+      <div class="pbody" id="utilBars"></div></div>
+    <div class="panel"><div class="phead"><span>Typical week (average Erlangs by hour)</span></div>
+      <div class="pbody"><div class="chart" id="heat"></div><div class="legend"><span>0</span><span class="ramp"></span><span id="heatMax">max</span></div></div></div>
+  </div>
+  <div class="panel"><div class="phead"><span>Talkgroups</span><span class="r small muted">tick talkgroups to size a move to P25 ↓</span></div>
+    <div class="scroll"><table id="tgTable"><thead><tr><th></th><th class="sort" data-k="tg">TG</th><th class="sort" data-k="label">name</th>
+      <th class="sort r" data-k="calls">calls</th><th class="sort r" data-k="ptts">CC grants</th><th class="sort r" data-k="air">airtime</th><th>share</th>
+      <th class="sort r" data-k="avg">avg s</th><th class="sort r" data-k="radios">radios</th><th class="sort r" data-k="busy_erl">busy-hr Erl</th><th>where</th></tr></thead><tbody></tbody></table></div></div>
+  <div class="panel"><div class="phead"><span>Move to P25: what would the selected talkgroups add?</span></div>
+    <div class="pbody">
+      <div class="form" style="margin-bottom:8px">
+        <div><label>P25 voice paths available (talkpaths at the site)</label><input type="number" id="p25paths" value="4" min="1"></div>
+        <div><label>P25 busy-hour load today (Erlangs, from your P25 stats)</label><input type="number" id="p25load" value="0" step="0.1" min="0"></div>
+        <div><label>Grade of service target (blocking %)</label><input type="number" id="p25gos" value="1" step="0.5" min="0.1"></div>
+      </div>
+      <div id="migr" class="muted">Tick one or more talkgroups in the table above.</div>
+    </div></div>
+</section>
+
+<!-- ============================== MAP -->
+<section class="view" id="v-map">
+  <div class="filters"><span class="muted small">GPS fixes from</span>
+    <button class="sm" data-mr="3600">1 h</button><button class="sm on" data-mr="86400">24 h</button><button class="sm" data-mr="604800">7 days</button><button class="sm" data-mr="0">All</button>
+    <span class="sep"></span><label class="small"><input type="checkbox" id="trailsCb" checked> trails</label>
+    <label class="small"><input type="checkbox" id="followCb" checked> fit to radios</label>
+    <span class="muted small" id="mapNote"></span></div>
+  <div class="grid2" style="grid-template-columns:3fr 1fr">
+    <div class="panel"><div id="map"></div></div>
+    <div class="panel"><div class="phead"><span>Radios with a fix</span></div>
+      <div class="scroll" style="max-height:calc(100vh - 250px)"><table><thead><tr><th>radio</th><th>last fix</th><th class="r">fixes</th></tr></thead><tbody id="posList"></tbody></table></div></div>
+  </div>
+</section>
+
+<!-- ============================== CALLS -->
+<section class="view" id="v-calls">
+  <div class="filters">
+    <input id="cTg" placeholder="talkgroup" style="width:110px"><input id="cRid" placeholder="radio ID" style="width:110px">
+    <select id="cFreq"><option value="">all channels</option></select>
+    <span class="muted small">uses the Traffic period</span>
+    <button class="sm" id="cGo">Search</button><span class="muted small" id="cNote"></span>
+  </div>
+  <div class="panel"><div class="scroll" style="max-height:calc(100vh - 200px)"><table><thead><tr><th>start</th><th>channel</th><th>talkgroup</th><th>radio</th><th class="r">seconds</th><th>flags</th></tr></thead><tbody id="callRows"></tbody></table></div></div>
+</section>
+
+<!-- ============================== RADIOS -->
+<section class="view" id="v-radios">
+  <div class="filters"><input id="radFilter" placeholder="filter by ID or name" style="width:220px"><span class="muted small">Traffic period · click a name to edit it</span></div>
+  <div class="panel"><div class="scroll" style="max-height:calc(100vh - 200px)"><table><thead><tr><th>radio ID</th><th>name</th><th>over-the-air alias</th>
+    <th class="r">calls</th><th class="r">CC grants</th><th class="r">airtime</th><th>talkgroups</th><th>last heard</th><th>last fix</th></tr></thead><tbody id="radRows"></tbody></table></div></div>
+</section>
+
+<!-- ============================== DATA -->
+<section class="view" id="v-data">
+  <div class="filters"><span class="muted small">show</span>
+    <button class="sm on" data-p="">all</button><button class="sm" data-p="lrrp">LRRP (GPS)</button><button class="sm" data-p="ars">ARS (registration)</button>
+    <button class="sm" data-p="tms">TMS (text)</button><button class="sm" data-p="udp">other IP</button><span class="muted small">· Traffic period</span></div>
+  <div class="grid2">
+    <div class="panel"><div class="phead"><span>Packet data</span><span class="r small muted" id="dNote"></span></div>
+      <div class="scroll"><table><thead><tr><th>time</th><th>channel</th><th>from</th><th>to</th><th>message</th></tr></thead><tbody id="dataRows"></tbody></table></div></div>
+    <div>
+      <div class="panel"><div class="phead"><span>Control channel grants</span></div>
+        <div class="feed"><table><thead><tr><th>time</th><th>type</th><th>to</th><th>from</th><th>LPCN/TS</th><th>freq</th></tr></thead><tbody id="grantRows"></tbody></table></div></div>
+      <div class="panel"><div class="phead"><span>Decoder counters (this session)</span></div><div class="pbody small mono" id="counters"></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== SETUP -->
+<section class="view" id="v-setup">
+  <div class="grid2" style="grid-template-columns:1fr 2fr">
+    <div>
+      <div class="panel"><div class="phead"><span>Sites</span><span class="r"><button class="sm" id="newSite">New site</button></span></div>
+        <div class="pbody" id="siteList"></div></div>
+      <div class="panel"><div class="phead"><span>Capture plan</span></div><div class="pbody" id="planBox"></div></div>
+      <div class="panel" id="lpcnPanel"><div class="phead"><span>Logical channels (Capacity Max)</span></div>
+        <div class="pbody"><div class="small muted">Learned automatically when a grant is followed by voice on a frequency we hear. Add any you know.</div>
+          <table class="small"><thead><tr><th>LPCN</th><th>frequency</th><th>how</th><th></th></tr></thead><tbody id="lpcnRows"></tbody></table>
+          <div style="display:flex;gap:6px;margin-top:6px"><input id="lpcnN" placeholder="LPCN" style="width:80px"><input id="lpcnF" placeholder="MHz" style="width:110px"><button class="sm" id="lpcnAdd">Add</button></div></div></div>
+    </div>
+    <div>
+      <div class="panel"><div class="phead"><span id="edTitle">Edit site</span><span class="r"><button class="sm" id="delSite">Delete</button>
+        <button class="sm" id="saveSite">Save</button><button class="sm go" id="saveStart">Save &amp; monitor</button></span></div>
+        <div class="pbody">
+          <div class="form">
+            <div style="grid-column:span 2"><label>Name</label><input id="sName"></div>
+            <div><label>System type</label><select id="sKind"><option value="conventional">Conventional DMR / MOTOTRBO repeaters</option>
+              <option value="capmax">Capacity Max / DMR Tier III</option><option value="capplus">Capacity Plus / Connect Plus</option></select></div>
+            <div><label>Capture width per RTL</label><select id="sRate"><option value="1920000">1.92 MS/s (≈1.6 MHz usable)</option><option value="2400000">2.4 MS/s (≈2.0 MHz usable)</option></select></div>
+            <div><label>RTL gain</label><input id="sGain" placeholder="LNA:40"></div>
+            <div><label>Rotate windows every (s), 1 RTL</label><input id="sDwell" type="number" min="60" step="30"></div>
+          </div>
+          <div style="margin-top:8px"><label class="small muted">Extra RTL-SDR dongles to use (one per capture window)</label><div id="rtlList" class="small"></div></div>
+          <div class="small muted" style="margin-top:6px" id="sNotes"></div>
+          <h4 style="margin:14px 0 6px;font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:1px">Channels</h4>
+          <div class="scroll" style="max-height:40vh"><table class="chedit"><thead><tr><th>MHz</th><th>name</th><th>CC</th><th>mode</th><th>TS1 TG</th><th>TS1 name</th><th>TS2 TG</th><th>TS2 name</th><th></th></tr></thead><tbody id="chRows"></tbody></table></div>
+          <button class="sm" id="addCh" style="margin-top:6px">+ channel</button>
+          <h4 style="margin:14px 0 6px;font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:1px">Paste from RadioReference</h4>
+          <div class="small muted">Select the frequency rows on the RadioReference page (Frequency … Tag), copy, paste here. "CC 15 / TG 101 / SL 1" fills the color code and the slot's talkgroup; rows with the same frequency merge.</div>
+          <textarea id="rrText" placeholder="453.250	WPUI539	RM	CC 15 / TG 101 / SL 1	North Brwrd1	North Broward Bureau (Pompano Beach)	DMR	Corrections"></textarea>
+          <div style="display:flex;gap:6px;margin-top:6px"><button class="sm" id="rrReplace">Replace channels</button><button class="sm" id="rrMerge">Add / merge</button><span class="small muted" id="rrNote"></span></div>
+        </div></div>
+    </div>
+  </div>
+</section>
+</main>
+<div class="tip" id="tip"></div>
+
+<script>
+'use strict';
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const api=(u,b)=>fetch(u,b?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}:{}).then(r=>r.json());
+const pad=n=>String(n).padStart(2,'0');
+const tm=t=>{if(!t)return '';const d=new Date(t*1000);return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());};
+const dtm=t=>{if(!t)return '';const d=new Date(t*1000);return (d.getMonth()+1)+'/'+d.getDate()+' '+pad(d.getHours())+':'+pad(d.getMinutes());};
+const hms=s=>{s=Math.round(s||0);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return h?h+':'+pad(m)+':'+pad(x):m+':'+pad(x);};
+const pct=v=>v==null?'—':(v*100).toFixed(v<0.1?1:0)+'%';
+const fx=(v,n=2)=>v==null?'—':(+v).toFixed(n);
+const tgName=(tg,l)=>tg==null?'<span class="muted">unidentified</span>':(l?esc(l)+' <span class="muted mono">'+tg+'</span>':'<span class="mono">TG '+tg+'</span>');
+const ridName=(r,l)=>!r?'<span class="muted">—</span>':(l?esc(l)+' <span class="muted mono">'+r+'</span>':'<span class="mono">'+r+'</span>');
+const tip=$('#tip');
+function showTip(e,html){tip.innerHTML=html;tip.style.display='block';const w=tip.offsetWidth,h=tip.offsetHeight;
+  let x=e.clientX+14,y=e.clientY+14;if(x+w>innerWidth-8)x=e.clientX-w-14;if(y+h>innerHeight-8)y=e.clientY-h-14;tip.style.left=x+'px';tip.style.top=y+'px';}
+function hideTip(){tip.style.display='none';}
+
+/* ---------------- tabs */
+let view='live';
+$$('#tabs button').forEach(b=>b.onclick=()=>{view=b.dataset.v;$$('#tabs button').forEach(x=>x.classList.toggle('active',x===b));
+  $$('.view').forEach(v=>v.classList.toggle('active',v.id==='v-'+view));history.replaceState(null,'','#'+view);refreshView(true);});
+addEventListener('load',()=>{const h=location.hash.slice(1);const b=$$('#tabs button').find(x=>x.dataset.v===h);if(b)b.click();});
+function refreshView(force){
+  if(view==='traffic'&&(force||!STATS))loadStats();
+  if(view==='map')loadMap(force);
+  if(view==='calls'&&force)loadCalls();
+  if(view==='radios'&&(force||!STATS))loadStats();
+  if(view==='data'&&force)loadData();
+  if(view==='setup'&&force)loadSites();
+}
+
+/* ---------------- labels (click to rename) */
+async function rename(kind,id,cur){if(id==null)return;const t=prompt((kind==='tg'?'Talkgroup ':'Radio ')+id+' name:',cur||'');if(t===null)return;
+  await api('/api/trbo/label',{kind,id,label:t});LIVE_T=0;if(STATS)loadStats();}
+document.addEventListener('click',e=>{const el=e.target.closest('[data-lbl]');if(!el)return;const [k,i]=el.dataset.lbl.split(':');rename(k,+i,el.dataset.cur);});
+
+/* ---------------- LIVE */
+let LIVE=null, LIVE_T=0, audioWs=null, audioPort=null, audioCtx=null, audioNext=0;
+async function poll(){
+  try{LIVE=await api('/api/trbo/live');renderHeader();renderSpk();if(view==='live')renderLive();if(view==='data')renderCounters();}catch(e){}
+  setTimeout(poll,1000);
+}
+function renderHeader(){
+  const L=LIVE,s=L.site;
+  $('#hdot').classList.toggle('on',!!L.running);$('#hrun').textContent=L.running?'monitoring':(L.enabled?'starting…':'stopped');
+  $('#hsite').textContent=s?s.name:'—';$('#hsite').title=s?s.name:'';
+  const w=L.windows||[];$('#hwin').innerHTML=w.length?('<b>'+w.filter(x=>x.monitored).length+'</b>/'+w.length+' window'+(w.length>1?'s':'')+' live'):'';
+  $('#hrot').textContent=L.rotating&&L.next_rotate!=null?('rotating in '+Math.max(0,Math.round(L.next_rotate))+' s'):'';
+  const b=$('#startBtn');b.textContent=L.enabled?'Stop (back to P25)':'Start monitoring';b.className=L.enabled?'stop':'go';
+  $('#grantPanel').style.display=(s&&s.kind==='capmax')||(L.grants||[]).length?'':'none';
+}
+$('#startBtn').onclick=async()=>{const on=!(LIVE&&LIVE.enabled);
+  if(on&&!(LIVE&&LIVE.site)){alert('Pick a site on the Setup tab first.');$$('#tabs button')[6].click();return;}
+  if(!on&&!confirm('Stop TRBO monitoring and give the radio back to P25 Looking Glass?'))return;
+  await api('/api/trbo/activate',{enabled:on});};
+function renderLive(){
+  const L=LIVE;let msg='';
+  if(!L.site)msg='<div class="warnbox">No site selected. Open <b>Setup</b>, pick or create a site, then press <b>Save &amp; monitor</b>.</div>';
+  else if(!L.enabled)msg='<div class="warnbox">Not monitoring. The radio is with P25 Looking Glass. Press <b>Start monitoring</b> to begin logging this site.</div>';
+  if(L.err)msg+='<div class="errbox">⚠ '+esc(L.err)+'</div>';
+  if(L.rotating)msg+='<div class="warnbox">One RTL covers '+L.windows.filter(w=>w.monitored).length+' of '+L.windows.length+' capture windows at a time, so it rotates. Utilization figures only count the time each channel was actually monitored. Add a second RTL in Setup to watch every channel continuously.</div>';
+  $('#liveMsg').innerHTML=msg;
+  const chs=L.channels||[];
+  $('#chNote').textContent=chs.length?chs.filter(c=>c.monitored).length+' of '+chs.length+' monitored now':'';
+  $('#chgrid').innerHTML=chs.map(c=>{
+    const off=c.mode!=='dmr'||!c.monitored;
+    let badges='';
+    if(c.mode!=='dmr')badges+='<span class="badge">analog, not decoded</span>';
+    else if(!c.monitored)badges+='<span class="badge">'+(L.rotating?'other window':'not monitored')+'</span>';
+    if(c.cc!=null)badges+='<span class="badge'+(c.cc_seen!=null&&c.cc_seen!==c.cc?' w':'')+'" title="color code: expected '+c.cc+(c.cc_seen!=null?', heard '+c.cc_seen:'')+'">CC '+(c.cc_seen!=null&&c.cc_seen!==c.cc?c.cc_seen+'≠'+c.cc:c.cc)+'</span>';
+    else if(c.cc_seen!=null)badges+='<span class="badge">CC '+c.cc_seen+'</span>';
+    if(c.keyed)badges+='<span class="badge live">on air</span>';
+    const SP=L.speaker||{};const muted=(SP.muted||[]).includes(c.freq);const nowp=(SP.playing||[]).some(p=>p.freq===c.freq);
+    const lis=c.monitored&&c.audio_port?('<button class="sm'+(nowp?' on':'')+'" data-spkmute="'+c.freq+'" title="uConsole speaker: '+(muted?'muted, tap to unmute':'tap to mute this repeater')+'">'+(muted?'🔇':'🔈')+'</button>'+
+      '<button class="sm'+(audioPort===c.audio_port?' on':'')+'" data-listen="'+c.audio_port+'" title="Listen in this browser">🎧</button>'):'';
+    const slots=c.mode!=='dmr'?'':c.slots.map(s=>{
+      if(s.active){const fl=(s.enc?'<span class="badge enc">🔒 enc</span> ':'')+(s.emerg?'<span class="badge em">⚠ EMERG</span> ':'');
+        return '<div class="slot act"><span class="ts">TS'+s.slot+'</span><div class="who"><div class="tg">'+tgName(s.tg,s.tglabel)+'</div><div class="rid">'+(s.src?'radio '+ridName(s.src,s.srclabel):'radio —')+(s.ctype==='private'?' · private call':'')+'</div></div><div style="text-align:right">'+fl+spkTgBtn(s.tg)+'<span class="tmr">'+hms(s.secs)+'</span></div></div>';}
+      const cfg=s.cfg_label||(s.cfg_tg?'TG '+s.cfg_tg:'');
+      return '<div class="slot'+(s.hang?' hang':'')+'"><span class="ts">TS'+s.slot+'</span><div class="who"><div class="rid">'+(cfg?esc(cfg):'<span class="muted">—</span>')+'</div></div><span class="small muted">'+spkTgBtn(s.cfg_tg)+(s.hang?'hang':'idle')+'</span></div>';}).join('');
+    return '<div class="ch'+(c.keyed?' keyed':'')+(off?' off':'')+'"><div class="chh"><span class="f">'+c.freq.replace(/0+$/,'').replace(/\.$/,'.0')+'</span><span class="l" title="'+esc(c.label)+'">'+esc(c.label||'')+'</span>'+lis+'</div><div style="padding:4px 10px;display:flex;gap:4px;flex-wrap:wrap">'+badges+'</div>'+slots+'</div>';
+  }).join('')||'<div class="empty">No channels.</div>';
+  $('#recent').innerHTML=(L.recent||[]).slice(0,60).map(r=>'<tr><td class="mono">'+tm(r.start)+'</td><td class="mono small">'+r.freq.replace(/0+$/,'')+' /'+r.slot+'</td><td>'+tgName(r.tg,r.tglabel)+(r.enc?' 🔒':'')+(r.emerg?' ⚠':'')+'</td><td class="small">'+ridName(r.src,r.srclabel)+'</td><td class="r num">'+fx(r.dur,1)+'</td></tr>').join('')||'<tr><td colspan="5" class="empty">Nothing yet.</td></tr>';
+  $('#grants').innerHTML=(L.grants||[]).slice(0,60).map(g=>'<tr><td class="mono">'+tm(g.ts)+'</td><td class="small">'+esc(g.op)+'</td><td>'+(g.op.includes('group')||g.op.includes('broadcast')?tgName(g.tg,g.tglabel):ridName(g.tg,g.tglabel))+'</td><td class="small">'+ridName(g.src,g.srclabel)+'</td><td class="mono small">'+g.lpcn+'/'+g.slot+(g.freq?' <span class="muted">'+g.freq.replace(/0+$/,'')+'</span>':'')+'</td></tr>').join('')||'<tr><td colspan="5" class="empty">No grants yet.</td></tr>';
+  $('#ldata').innerHTML=(L.data||[]).slice(0,40).map(d=>'<tr><td class="mono">'+tm(d.ts)+'</td><td class="small">'+ridName(d.src,d.srclabel)+'</td><td class="small">'+esc(d.summary)+'</td></tr>').join('')||'<tr><td colspan="3" class="empty">No data yet.</td></tr>';
+}
+/* uConsole speaker (played by the service itself, filtered by talkgroup) */
+function spkTgBtn(tg){if(tg==null)return '';const S=(LIVE&&LIVE.speaker)||{};const on=(S.tgs||[]).includes(tg);
+  return '<button class="sm" style="padding:0 6px;margin-right:6px;'+(on?'border-color:rgba(56,189,248,.7);color:#fff':'opacity:.55')+'" data-spktg="'+tg+'" title="'+(on?'In the speaker list (tap to remove)':'Add to the speaker list')+'">'+(on?'🔊':'🔈')+'</button>';}
+async function setSpk(patch){const S=Object.assign({},(LIVE&&LIVE.speaker)||{},patch);const r=await api('/api/trbo/speaker',S);if(LIVE)LIVE.speaker=r;renderSpk();if(view==='live')renderLive();}
+function renderSpk(){const S=(LIVE&&LIVE.speaker)||{};
+  const b=$('#spkBtn');b.textContent=S.on?'🔊 Speaker on':'🔈 Speaker off';b.className='sm'+(S.on?' on':'');
+  const t=$('#spkToggle');t.textContent=S.on?'On, tap to turn off':'Off, tap to turn on';t.className='sm'+(S.on?' on':'');
+  if(document.activeElement!==$('#spkMode'))$('#spkMode').value=S.mode||'all';
+  if(document.activeElement!==$('#spkGain'))$('#spkGain').value=String(+(S.gain||2));
+  const sel=(S.tgs||[]);
+  $('#spkSel').innerHTML=(S.mode==='selected'?'<div class="small muted" style="margin-bottom:4px">Plays only these talkgroups:</div>':'<div class="small muted" style="margin-bottom:4px">Playing every talkgroup. Pick talkgroups below, then choose "Only selected talkgroups":</div>')+
+    (sel.length?sel.map(tg=>'<span class="pill" style="font-family:inherit;font-size:12px;padding:2px 6px">'+(TGL[tg]?esc(TGL[tg])+' ':'')+'<span class="mono muted">'+tg+'</span> <a href="#" data-spkrm="'+tg+'" style="text-decoration:none">✕</a></span>').join(' '):'<span class="small muted">none selected</span>')+
+    ((S.muted||[]).length?'<div class="small muted" style="margin-top:4px">Muted repeaters: '+S.muted.map(f=>'<span class="pill">'+f.replace(/0+$/,'')+' <a href="#" data-spkmute="'+f+'" style="text-decoration:none">✕</a></span>').join(' ')+'</div>':'');
+  const p=S.playing||[];$('#spkNow').innerHTML=S.on?(p.length?'▶ '+p.map(x=>esc(x.tglabel||(x.tg!=null?'TG '+x.tg:x.freq))).join(', '):'listening'):'';
+  $('#spkErr').innerHTML=S.err?'<span class="stat-bad">'+esc(S.err)+'</span>':'';
+}
+let TGL={};
+async function loadTgList(){try{const s=await api('/api/trbo/stats?from=0');TGL={};s.tgs.forEach(t=>{if(t.tg!=null)TGL[t.tg]=t.label;});
+  (LIVE&&LIVE.site?LIVE.site.channels:[]).forEach(c=>['ts1','ts2'].forEach(k=>{if(c[k]&&c[k].tg)TGL[c[k].tg]=TGL[c[k].tg]||c[k].label;}));
+  $('#tgList').innerHTML=Object.entries(TGL).map(([t,l])=>'<option value="'+t+'">'+esc(l||'')+'</option>').join('');renderSpk();}catch(e){}setTimeout(loadTgList,120000);}
+$('#spkBtn').onclick=$('#spkToggle').onclick=()=>setSpk({on:!((LIVE&&LIVE.speaker)||{}).on});
+$('#spkMode').onchange=e=>setSpk({mode:e.target.value});
+$('#spkGain').onchange=e=>setSpk({gain:+e.target.value});
+$('#spkAddBtn').onclick=()=>{const v=parseInt($('#spkAdd').value,10);if(!v)return;const S=(LIVE&&LIVE.speaker)||{};setSpk({tgs:[...new Set([...(S.tgs||[]),v])]});$('#spkAdd').value='';};
+document.addEventListener('click',e=>{const S=(LIVE&&LIVE.speaker)||{};
+  const a=e.target.closest('[data-spktg]');if(a){const tg=+a.dataset.spktg;const set=new Set(S.tgs||[]);set.has(tg)?set.delete(tg):set.add(tg);setSpk({tgs:[...set]});return;}
+  const r=e.target.closest('[data-spkrm]');if(r){e.preventDefault();setSpk({tgs:(S.tgs||[]).filter(t=>t!==+r.dataset.spkrm)});return;}
+  const m=e.target.closest('[data-spkmute]');if(m){e.preventDefault();const f=m.dataset.spkmute;const set=new Set(S.muted||[]);set.has(f)?set.delete(f):set.add(f);setSpk({muted:[...set]});}});
+/* audio in this browser: OP25 streams 8 kHz 16-bit PCM per channel on ws://host:port */
+document.addEventListener('click',e=>{const b=e.target.closest('[data-listen]');if(!b)return;const p=+b.dataset.listen;
+  if(audioWs){try{audioWs.close();}catch(x){}audioWs=null;}
+  if(audioPort===p){audioPort=null;renderLive();return;}
+  audioPort=p;if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)({sampleRate:8000});audioCtx.resume();
+  const w=new WebSocket('ws://'+location.hostname+':'+p);w.binaryType='arraybuffer';audioWs=w;
+  w.onmessage=ev=>{if(typeof ev.data==='string')return;const s=new Int16Array(ev.data);const buf=audioCtx.createBuffer(1,s.length,8000);const ch=buf.getChannelData(0);
+    for(let i=0;i<s.length;i++)ch[i]=Math.max(-1,Math.min(1,s[i]/32768*3));const src=audioCtx.createBufferSource();src.buffer=buf;src.connect(audioCtx.destination);
+    const now=audioCtx.currentTime;if(audioNext<now)audioNext=now+0.05;src.start(audioNext);audioNext+=buf.duration;};
+  renderLive();});
+
+/* ---------------- TRAFFIC */
+let STATS=null, RANGE={span:86400,from:null,to:null}, TGSORT={k:'air',d:-1}, SEL=new Set();
+function rangeArgs(){const to=RANGE.to||Date.now()/1000;const from=RANGE.span===0?0:(RANGE.from||to-RANGE.span);return 'from='+from+'&to='+to;}
+$$('#rangeBar [data-r]').forEach(b=>b.onclick=()=>{$$('#rangeBar [data-r]').forEach(x=>x.classList.toggle('on',x===b));RANGE={span:+b.dataset.r,from:null,to:null};loadStats();});
+$('#rApply').onclick=()=>{const f=$('#rFrom').value,t=$('#rTo').value;if(!f)return;$$('#rangeBar [data-r]').forEach(x=>x.classList.remove('on'));
+  RANGE={span:-1,from:new Date(f).getTime()/1000,to:t?new Date(t).getTime()/1000:null};loadStats();};
+$('#rRefresh').onclick=()=>loadStats();
+$('#exportSel').onchange=e=>{const v=e.target.value;if(v)location.href='/api/trbo/export/'+v+'.csv?'+rangeArgs();e.target.value='';};
+async function loadStats(){STATS=await api('/api/trbo/stats?'+rangeArgs());renderStats();renderRadios();}
+function renderStats(){
+  const S=STATS,T=S.totals;
+  const cap=LIVE&&LIVE.site&&LIVE.site.kind==='capmax';
+  const tiles=[
+    ['Transmissions',T.calls.toLocaleString(),T.avg_ptt?'avg '+fx(T.avg_ptt,1)+' s each':''],
+    ['Airtime',hms(T.air),'voice on monitored channels'],
+    ['Site utilization',pct(T.site_util),'airtime ÷ (slots × time monitored)'],
+    ['Busiest hour',T.busiest?fx(T.busiest.erl,2)+' Erl':'—',T.busiest?dtm(T.busiest.t):''],
+    ['P25 paths for busiest hour',T.busy_hour_paths_1pct!=null?T.busy_hour_paths_1pct:'—','at 1% blocking (Erlang B)'],
+    ['Most at once',T.max_concurrent,'simultaneous transmissions'],
+    ['Radios heard',T.radios,''],['Talkgroups',T.tgs,''],
+    ['Monitored',fx(T.monitored_h,1)+' ch-h','channel-hours of coverage'],
+  ];
+  if(cap||T.ptts)tiles.push(['CC voice grants',T.ptts.toLocaleString(),'PTTs seen on the control channel']);
+  tiles.push(['Data messages',T.data.toLocaleString(),Object.entries(T.data_by||{}).map(([k,v])=>k+' '+v).join(' · ')]);
+  tiles.push(['GPS fixes',T.positions.toLocaleString(),'']);
+  if(T.enc)tiles.push(['Encrypted calls',T.enc,'']);
+  if(T.emerg)tiles.push(['Emergencies',T.emerg,'']);
+  $('#kpis').innerHTML=tiles.map(t=>'<div class="kpi"><div class="v">'+t[1]+'</div><div class="k">'+t[0]+'</div><div class="s">'+esc(t[2])+'</div></div>').join('');
+  const cov=S.series.filter(s=>s.cover>0);const avgc=cov.length?cov.reduce((a,s)=>a+s.cover,0)/cov.length:0;
+  $('#covNote').innerHTML=!T.monitored_h?'<div class="warnbox">No monitoring time in this period yet. Start monitoring, or pick a longer period.</div>':
+    (avgc<0.95?'<div class="warnbox">Channels were monitored '+pct(avgc)+' of the time in this period (rotation, restarts, or the radio was with P25). Erlangs and utilization are scaled to the monitored time; call counts and airtime are what was actually heard.</div>':'');
+  drawHours();drawHeat();drawUtil();renderTgs();renderMigr();
+}
+function drawHours(){
+  const el=$('#hourChart'),S=STATS.series;if(!S.length){el.innerHTML='<div class="empty">No data in this period.</div>';$('#seriesNote').textContent='';return;}
+  const W=el.clientWidth||900,H=190,ml=40,mr=8,mt=8,mb=22,iw=W-ml-mr,ih=H-mt-mb;
+  // x axis spans the selected period (not just the hours that have data), at least 12 h
+  const f0=Math.floor(STATS.from/3600)*3600,f1=Math.ceil(STATS.to/3600)*3600;
+  let t0=STATS.from>0?Math.min(f0,S[0].t):S[0].t,t1=Math.max(f1,S[S.length-1].t+3600);
+  if(STATS.from<=0)t1=Math.min(t1,S[S.length-1].t+3600);
+  if(t1-t0<12*3600)t0=t1-12*3600;
+  const n=Math.max(1,Math.round((t1-t0)/3600));
+  const vmax=Math.max(0.05,...S.map(s=>s.erl||0));const nice=niceMax(vmax);
+  const bw=iw/n,gap=Math.max(Math.min(2,bw*0.2),bw-48);   // bars never wider than ~48 px
+  const y=v=>mt+ih-(v/nice)*ih;
+  let g='<svg viewBox="0 0 '+W+' '+H+'" height="'+H+'"><g class="axis">';
+  for(let i=0;i<=4;i++){const v=nice*i/4;g+='<line class="gridl" x1="'+ml+'" x2="'+(W-mr)+'" y1="'+y(v)+'" y2="'+y(v)+'"/><text x="'+(ml-6)+'" y="'+(y(v)+3)+'" text-anchor="end">'+(+v.toFixed(2))+'</text>';}
+  const step=Math.max(1,Math.ceil(n/12));
+  for(let i=0;i<n;i+=step){const d=new Date((t0+i*3600)*1000);const lab=(n>48?(d.getMonth()+1)+'/'+d.getDate()+' ':'')+pad(d.getHours())+':00';
+    g+='<text x="'+(ml+i*bw+bw/2)+'" y="'+(H-6)+'" text-anchor="middle">'+lab+'</text>';}
+  g+='</g>';
+  S.forEach(s=>{const i=Math.round((s.t-t0)/3600),x=ml+i*bw+gap/2,w=Math.max(1,bw-gap);
+    if(s.erl!=null&&s.erl>0){const h=Math.max(1,ih-(y(s.erl)-mt));const r=Math.min(4,w/2);
+      g+='<path d="M'+x+','+(mt+ih)+'V'+(mt+ih-h+r)+'q0,-'+r+' '+r+',-'+r+'H'+(x+w-r)+'q'+r+',0 '+r+','+r+'V'+(mt+ih)+'Z" fill="#338ced"/>';}
+    if(s.cover<0.95)g+='<rect x="'+x+'" y="'+(mt+ih+1)+'" width="'+w+'" height="3" fill="'+(s.cover<0.02?'#dc3c3d':'#fbb315')+'" opacity=".8"/>';
+    g+='<rect class="hit" data-t="'+s.t+'" x="'+(ml+i*bw)+'" y="'+mt+'" width="'+bw+'" height="'+ih+'" fill="transparent"/>';});
+  g+='</svg>';el.innerHTML=g;
+  const by={};S.forEach(s=>by[s.t]=s);
+  el.querySelectorAll('.hit').forEach(r=>{r.onmousemove=e=>{const s=by[r.dataset.t];r.setAttribute('fill','rgba(255,255,255,.05)');
+    showTip(e,'<b>'+dtm(s.t)+'</b><br>'+fx(s.erl,2)+' Erlangs<br>'+s.calls+' transmissions · '+hms(s.air)+' airtime'+(s.grants?'<br>'+s.grants+' CC voice grants':'')+'<br><span class="muted">monitored '+pct(s.cover)+' of the hour</span>');};
+    r.onmouseleave=()=>{r.setAttribute('fill','transparent');hideTip();};});
+  $('#seriesNote').textContent='yellow/red strip under a bar = hour only partly / not monitored';
+}
+function niceMax(v){const p=Math.pow(10,Math.floor(Math.log10(v)));for(const m of [1,2,2.5,5,10])if(m*p>=v)return m*p;return 10*p;}
+const RAMP=['#16233a','#0e3d7e','#0f4a96','#1757ac','#1b64be','#2370cd','#257de0','#338ced','#519ced','#6aabf1','#84b9f3','#9dc8f7','#b6d5f8','#cce3fd'];
+function drawHeat(){
+  const el=$('#heat'),H=STATS.heat;if(!H.length){el.innerHTML='<div class="empty">Needs at least an hour of monitoring.</div>';$('#heatMax').textContent='';return;}
+  const days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];const mx=Math.max(...H.map(h=>h.erl),0.01);$('#heatMax').textContent=fx(mx,2)+' Erl';
+  const W=el.clientWidth||460,ml=32,mt=4,cw=(W-ml)/24,ch=Math.max(14,Math.min(22,cw)),Hh=mt+7*ch+16;
+  const m={};H.forEach(h=>m[h.dow+'-'+h.hour]=h);
+  let g='<svg viewBox="0 0 '+W+' '+Hh+'" height="'+Hh+'"><g class="axis">';
+  days.forEach((d,i)=>g+='<text x="'+(ml-5)+'" y="'+(mt+i*ch+ch/2+3)+'" text-anchor="end">'+d+'</text>');
+  for(let h=0;h<24;h+=3)g+='<text x="'+(ml+h*cw+cw/2)+'" y="'+(mt+7*ch+12)+'" text-anchor="middle">'+pad(h)+'</text>';
+  g+='</g>';
+  for(let d=0;d<7;d++)for(let h=0;h<24;h++){const c=m[d+'-'+h];const fill=c?RAMP[Math.min(RAMP.length-1,Math.round(c.erl/mx*(RAMP.length-1)))]:'rgba(255,255,255,.03)';
+    g+='<rect data-k="'+d+'-'+h+'" x="'+(ml+h*cw+1)+'" y="'+(mt+d*ch+1)+'" width="'+(cw-2)+'" height="'+(ch-2)+'" rx="2" fill="'+fill+'"/>';}
+  g+='</svg>';el.innerHTML=g;
+  el.querySelectorAll('rect[data-k]').forEach(r=>{r.onmousemove=e=>{const [d,h]=r.dataset.k.split('-');const c=m[r.dataset.k];
+    showTip(e,'<b>'+days[d]+' '+pad(h)+':00</b><br>'+(c?fx(c.erl,2)+' Erlangs average<br><span class="muted">'+c.n+' hour'+(c.n>1?'s':'')+' of data</span>':'<span class="muted">not monitored</span>'));};r.onmouseleave=hideTip;});
+}
+function drawUtil(){
+  const rows=STATS.channels.filter(c=>c.mon>0);
+  if(!rows.length){$('#utilBars').innerHTML='<div class="empty">No monitored channels in this period.</div>';return;}
+  const mx=Math.max(0.05,...rows.map(r=>Math.max(r.util||0,r.peak_util||0)));const scale=niceMax(mx);
+  $('#utilBars').innerHTML=rows.map(r=>{const u=r.util||0,p=r.peak_util||0;
+    if(!r.calls&&r.keyed>0.9)return '<div class="ubar" data-tipu="'+r.freq+'/'+r.slot+'"><div class="n"><span class="mono">'+r.freq.replace(/0+$/,'')+'</span> TS'+r.slot+' <span class="muted">'+esc(r.slot_label||r.label||'')+'</span></div><div class="small muted">control channel: always transmitting, carries no voice</div><div class="v muted">CC</div></div>';
+    const lvl=p>=0.6?['stat-bad','▲ busy']:p>=0.35?['stat-warn','● watch']:['',''];
+    return '<div class="ubar" data-tipu="'+r.freq+'/'+r.slot+'"><div class="n"><span class="mono">'+r.freq.replace(/0+$/,'')+'</span> TS'+r.slot+' <span class="muted">'+esc(r.slot_label||r.label||'')+'</span></div>'+
+      '<div class="t"><i style="width:'+(u/scale*100)+'%"></i>'+(p?'<u style="left:'+(p/scale*100)+'%"></u>':'')+'</div><div class="v">'+pct(r.util)+(lvl[0]?' <span class="'+lvl[0]+'" title="busiest hour '+pct(p)+'">'+lvl[1].split(' ')[0]+'</span>':'')+'</div></div>';}).join('')+
+    '<div class="small muted" style="margin-top:6px">Scale 0–'+pct(scale)+' · ▲ busiest hour ≥ 60% · ● ≥ 35%</div>';
+  const by={};rows.forEach(r=>by[r.freq+'/'+r.slot]=r);
+  $$('#utilBars [data-tipu]').forEach(el=>{el.onmousemove=e=>{const r=by[el.dataset.tipu];showTip(e,'<b>'+r.freq+' MHz TS'+r.slot+'</b> '+esc(r.slot_label||r.label||'')+'<br>'+r.calls+' transmissions · '+hms(r.air)+' airtime<br>utilization '+pct(r.util)+' · busiest hour '+pct(r.peak_util)+(r.peak_t?' ('+dtm(r.peak_t)+')':'')+'<br>repeater keyed '+pct(r.keyed)+' (incl. hang time)'+(r.data_secs?'<br>data '+hms(r.data_secs):'')+'<br><span class="muted">monitored '+hms(r.mon)+'</span>');};el.onmouseleave=hideTip;});
+}
+function renderTgs(){
+  const rows=[...STATS.tgs];const k=TGSORT.k,d=TGSORT.d;
+  rows.sort((a,b)=>{const x=a[k],y=b[k];if(typeof x==='string'||typeof y==='string')return d*String(x||'').localeCompare(String(y||''));return d*((x||0)-(y||0));});
+  const tot=STATS.totals.air||1,mx=Math.max(...rows.map(r=>r.air),1);
+  $('#tgTable tbody').innerHTML=rows.map(r=>'<tr><td>'+(r.tg!=null?'<input type="checkbox" data-sel="'+r.tg+'"'+(SEL.has(r.tg)?' checked':'')+'>':'')+'</td>'+
+    '<td class="mono">'+(r.tg!=null?r.tg:'—')+'</td><td>'+(r.tg!=null?'<span class="lbl" data-lbl="tg:'+r.tg+'" data-cur="'+esc(r.label)+'">'+(esc(r.label)||'<span class="muted">name…</span>')+'</span>':'<span class="muted">unidentified</span>')+(r.enc?' 🔒':'')+(r.emerg?' ⚠':'')+'</td>'+
+    '<td class="r num">'+r.calls+'</td><td class="r num">'+(r.ptts||'')+'</td><td class="r num">'+hms(r.air)+'</td>'+
+    '<td><span class="share" style="width:'+(r.air/mx*90)+'px"></span><span class="small muted">'+pct(r.air/tot)+'</span></td>'+
+    '<td class="r num">'+fx(r.avg,1)+'</td><td class="r num">'+r.radios+'</td><td class="r num">'+fx(r.busy_erl,3)+'</td><td class="small muted mono">'+r.where.map(w=>w.replace(/0+\//,'/')).join(' ')+'</td></tr>').join('')||'<tr><td colspan="11" class="empty">No talkgroups heard in this period.</td></tr>';
+  $$('#tgTable [data-sel]').forEach(c=>c.onchange=()=>{const t=+c.dataset.sel;c.checked?SEL.add(t):SEL.delete(t);renderMigr();});
+}
+$$('#tgTable th.sort').forEach(th=>th.onclick=()=>{const k=th.dataset.k;TGSORT={k,d:TGSORT.k===k?-TGSORT.d:(k==='label'||k==='tg'?1:-1)};renderTgs();});
+function erlangB(a,n){let b=1;for(let k=1;k<=n;k++)b=a*b/(k+a*b);return b;}
+function pathsFor(a,g){let n=0;while(erlangB(a,n)>g&&n<500)n++;return n;}
+['p25paths','p25load','p25gos'].forEach(i=>$('#'+i).oninput=renderMigr);
+function renderMigr(){
+  if(!STATS||!SEL.size){$('#migr').innerHTML='<span class="muted">Tick one or more talkgroups in the table above.</span>';return;}
+  const rows=STATS.tgs.filter(r=>SEL.has(r.tg));const hours={};
+  const cover={};STATS.series.forEach(s=>cover[Math.round(s.t/3600)]=s.cover);
+  rows.forEach(r=>Object.entries(r.hours).forEach(([h,v])=>hours[h]=(hours[h]||0)+v));
+  let best=0,bestH=null;Object.entries(hours).forEach(([h,v])=>{const c=cover[h]||0;if(c>0.02){const e=v/3600/c;if(e>best){best=e;bestH=+h;}}});
+  const air=rows.reduce((a,r)=>a+r.air,0),calls=rows.reduce((a,r)=>a+r.calls,0),radios=rows.reduce((a,r)=>a+r.radios,0);
+  const N=+$('#p25paths').value||1,base=+$('#p25load').value||0,g=(+$('#p25gos').value||1)/100;
+  const before=erlangB(base,N),after=erlangB(base+best,N),need=pathsFor(base+best,g);
+  const cls=after>g?'errbox':(after>g/2?'warnbox':'okbox');
+  $('#migr').innerHTML='<div class="kpis" style="margin:0 0 8px">'+
+    '<div class="kpi"><div class="v">'+rows.length+'</div><div class="k">talkgroups</div><div class="s">'+radios+' radios (may overlap)</div></div>'+
+    '<div class="kpi"><div class="v">'+hms(air)+'</div><div class="k">airtime</div><div class="s">'+calls+' transmissions</div></div>'+
+    '<div class="kpi"><div class="v">'+fx(best,3)+'</div><div class="k">busy-hour Erlangs</div><div class="s">'+(bestH?dtm(bestH*3600):'')+'</div></div>'+
+    '<div class="kpi"><div class="v">'+need+'</div><div class="k">P25 paths needed</div><div class="s">for '+fx(base+best,2)+' Erl at '+(g*100)+'% blocking</div></div></div>'+
+    '<div class="'+cls+'">With '+N+' P25 voice path'+(N>1?'s':'')+': busy-hour blocking goes from <b>'+pct(before)+'</b> to <b>'+pct(after)+'</b> if these talkgroups move. '+
+    (after>g?'That is above your '+(g*100)+'% target: plan for '+need+' paths, or move fewer talkgroups.':'That is within your '+(g*100)+'% target.')+
+    '<div class="small muted" style="margin-top:4px">Erlang B, busiest single hour of the combined selection in this period. A DMR repeater carries 2 calls (one per timeslot); a P25 Phase 1 voice channel carries 1, Phase 2 carries 2. Longer measurement periods give firmer numbers.</div></div>';
+}
+
+/* ---------------- RADIOS */
+$('#radFilter').oninput=renderRadios;
+function renderRadios(){
+  if(!STATS)return;const f=$('#radFilter').value.trim().toLowerCase();
+  const rows=STATS.radios.filter(r=>!f||String(r.rid).includes(f)||(r.label||'').toLowerCase().includes(f)||(r.ota||'').toLowerCase().includes(f));
+  $('#radRows').innerHTML=rows.map(r=>'<tr><td class="mono">'+r.rid+'</td><td><span class="lbl" data-lbl="rid:'+r.rid+'" data-cur="'+esc(r.label)+'">'+(esc(r.label)||'<span class="muted">name…</span>')+'</span></td><td>'+esc(r.ota||'')+'</td>'+
+    '<td class="r num">'+r.calls+'</td><td class="r num">'+(r.ptts||'')+'</td><td class="r num">'+hms(r.air)+'</td><td class="small mono">'+r.tgs.join(' ')+'</td><td class="small">'+dtm(r.last)+'</td>'+
+    '<td class="small mono">'+(r.pos?'<a href="#" data-goto="'+r.rid+'">'+fx(r.pos[0],4)+', '+fx(r.pos[1],4)+'</a>':'')+'</td></tr>').join('')||'<tr><td colspan="9" class="empty">No radios in this period.</td></tr>';
+}
+document.addEventListener('click',e=>{const a=e.target.closest('[data-goto]');if(!a)return;e.preventDefault();GOTO=+a.dataset.goto;$$('#tabs button')[2].click();});
+
+/* ---------------- MAP */
+let MAP=null,MLAYER=null,MSPAN=86400,GOTO=null,MAP_T=0;
+$$('[data-mr]').forEach(b=>b.onclick=()=>{$$('[data-mr]').forEach(x=>x.classList.toggle('on',x===b));MSPAN=+b.dataset.mr;loadMap(true);});
+$('#trailsCb').onchange=()=>loadMap(true);
+async function loadMap(force){
+  if(!MAP){MAP=L.map('map',{preferCanvas:true}).setView([26.12,-80.14],10);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'© OpenStreetMap'}).addTo(MAP);MLAYER=L.layerGroup().addTo(MAP);}
+  setTimeout(()=>MAP.invalidateSize(),50);
+  if(!force&&Date.now()-MAP_T<5000)return;MAP_T=Date.now();
+  const to=Date.now()/1000,from=MSPAN?to-MSPAN:0;
+  const d=await api('/api/trbo/positions?from='+from+'&to='+to);
+  MLAYER.clearLayers();const pts=[];
+  if($('#trailsCb').checked)Object.values(d.trails).forEach(t=>{if(t.length>1)L.polyline(t.map(p=>[p[0],p[1]]),{color:'#338ced',weight:2,opacity:.55}).addTo(MLAYER);});
+  d.positions.forEach(p=>{const age=to-p.ts;const col=age<900?'#36d399':age<3600?'#fbb315':'#7d8aa0';
+    const m=L.circleMarker([p.lat,p.lon],{radius:7,color:'#0a0e14',weight:2,fillColor:col,fillOpacity:1}).addTo(MLAYER);
+    m.bindTooltip((p.label||p.rid)+'',{permanent:true,direction:'right',offset:[8,0],className:'rlabel'});
+    m.bindPopup('<b>'+esc(p.label||'Radio '+p.rid)+'</b><br>ID '+p.rid+'<br>'+dtm(p.ts)+'<br>'+p.lat.toFixed(5)+', '+p.lon.toFixed(5)+(p.speed!=null?'<br>'+p.speed+' km/h':'')+(p.heading!=null?' · '+p.heading+'°':'')+'<br>'+p.n+' fixes · '+esc(p.how));
+    pts.push([p.lat,p.lon]);if(GOTO===p.rid){MAP.setView([p.lat,p.lon],15);m.openPopup();}});
+  if(GOTO==null&&pts.length&&$('#followCb').checked&&force)MAP.fitBounds(pts,{padding:[40,40],maxZoom:14});
+  GOTO=null;
+  $('#mapNote').textContent=d.positions.length+' radios · green < 15 min, amber < 1 h, grey older';
+  $('#posList').innerHTML=d.positions.sort((a,b)=>b.ts-a.ts).map(p=>'<tr><td><a href="#" data-goto="'+p.rid+'">'+(esc(p.label)||p.rid)+'</a></td><td class="small">'+dtm(p.ts)+'</td><td class="r num">'+p.n+'</td></tr>').join('')||'<tr><td colspan="3" class="empty">No GPS fixes in this period. MOTOTRBO radios report location by LRRP when the system polls them.</td></tr>';
+}
+
+/* ---------------- CALL LOG */
+$('#cGo').onclick=loadCalls;
+async function loadCalls(){
+  let u='/api/trbo/calls?limit=1000&'+rangeArgs();const tg=$('#cTg').value.trim(),rid=$('#cRid').value.trim(),f=$('#cFreq').value;
+  if(tg)u+='&tg='+encodeURIComponent(tg);if(rid)u+='&rid='+encodeURIComponent(rid);if(f)u+='&freq='+encodeURIComponent(f);
+  const d=await api(u);$('#cNote').textContent=d.calls.length+(d.calls.length>=1000?'+ (newest 1000)':'')+' transmissions';
+  $('#callRows').innerHTML=d.calls.map(c=>'<tr><td class="mono small">'+dtm(c.start)+':'+pad(new Date(c.start*1000).getSeconds())+'</td><td class="mono small">'+c.freq.replace(/0+$/,'')+' TS'+c.slot+'</td><td>'+tgName(c.tg,c.tglabel)+(c.ctype==='private'?' <span class="muted small">private</span>':'')+'</td><td>'+ridName(c.src,c.srclabel)+'</td><td class="r num">'+fx(c.dur,1)+'</td><td>'+(c.enc?'<span class="badge enc">🔒 enc</span> ':'')+(c.emerg?'<span class="badge em">⚠ emergency</span>':'')+'</td></tr>').join('')||'<tr><td colspan="6" class="empty">No transmissions match.</td></tr>';
+}
+
+/* ---------------- DATA */
+let DPROTO='';
+$$('[data-p]').forEach(b=>b.onclick=()=>{$$('[data-p]').forEach(x=>x.classList.toggle('on',x===b));DPROTO=b.dataset.p;loadData();});
+async function loadData(){
+  const d=await api('/api/trbo/data?limit=800&'+rangeArgs()+(DPROTO?'&proto='+DPROTO:''));
+  $('#dNote').textContent=d.data.length+' messages';
+  $('#dataRows').innerHTML=d.data.map(x=>'<tr><td class="mono small">'+dtm(x.ts)+':'+pad(new Date(x.ts*1000).getSeconds())+'</td><td class="mono small">'+(x.freq||'').replace(/0+$/,'')+' /'+x.slot+'</td><td class="small">'+ridName(x.src,x.srclabel)+'</td><td class="small">'+ridName(x.dst,x.dstlabel)+'</td><td class="small" title="'+esc(x.hex)+'"><span class="badge">'+esc(x.proto)+'</span> '+esc(x.summary)+'</td></tr>').join('')||'<tr><td colspan="5" class="empty">No packet data in this period.</td></tr>';
+  $('#grantRows').innerHTML=d.grants.map(g=>'<tr><td class="mono small">'+tm(g.ts)+'</td><td class="small">'+esc(g.op)+'</td><td>'+(g.op.includes('group')?tgName(g.tg,g.tglabel):ridName(g.tg,g.tglabel))+'</td><td class="small">'+ridName(g.src,g.srclabel)+'</td><td class="mono small">'+g.lpcn+'/'+g.slot+'</td><td class="mono small">'+(g.freq||'')+'</td></tr>').join('')||'<tr><td colspan="6" class="empty">No grants (normal for conventional repeaters).</td></tr>';
+  renderCounters();
+}
+function renderCounters(){if(!LIVE)return;const c=LIVE.counts||{};
+  $('#counters').innerHTML=Object.entries(c).sort((a,b)=>b[1]-a[1]).map(([k,v])=>esc(k)+': '+v).join('<br>')+
+    (Object.keys(LIVE.unhandled||{}).length?'<br><br><span class="muted">not decoded: '+Object.entries(LIVE.unhandled).map(([k,v])=>esc(k)+' ×'+v).join(', ')+'</span>':'')+'<br><br><span class="muted">'+LIVE.lines+' decoder lines</span>';}
+
+/* ---------------- SETUP */
+let SITES=[], ED=null, RTLS=[];
+async function loadSites(){
+  const d=await api('/api/trbo/sites');SITES=d.sites;
+  try{RTLS=(await api('/api/trbo/rtls')).rtls||[];}catch(e){RTLS=[];}
+  $('#siteList').innerHTML=SITES.map(s=>'<div class="sitecard'+(s.id===d.active?' act':'')+'"><div style="flex:1"><div class="n">'+esc(s.name)+'</div><div class="small muted">'+s.channels.length+' channels · '+(d.plans[s.id]||[]).length+' capture window(s) · '+esc(s.kind)+(s.id===d.active?(d.enabled?' · <b class="stat-ok">monitoring</b>':' · selected'):'')+'</div></div>'+
+    '<button class="sm" data-ed="'+s.id+'">Edit</button><button class="sm go" data-run="'+s.id+'">Monitor</button></div>').join('')||'<div class="empty">No sites.</div>';
+  $$('[data-ed]').forEach(b=>b.onclick=()=>edit(SITES.find(s=>s.id===b.dataset.ed)));
+  $$('[data-run]').forEach(b=>b.onclick=async()=>{await api('/api/trbo/activate',{site:b.dataset.run,enabled:true});loadSites();$$('#tabs button')[0].click();});
+  if(!ED)edit(SITES.find(s=>s.id===d.active)||SITES[0]);else edit(ED);
+  const fs=$('#cFreq');const cur=fs.value;const act=SITES.find(s=>s.id===d.active);
+  fs.innerHTML='<option value="">all channels</option>'+(act?act.channels.map(c=>'<option>'+c.freq+'</option>').join(''):'');fs.value=cur;
+}
+function edit(s){
+  ED=s?JSON.parse(JSON.stringify(s)):{name:'New site',kind:'conventional',rate:1920000,gain:'LNA:40',dwell:300,rtls:[],channels:[]};
+  $('#edTitle').textContent=ED.id?'Edit site':'New site';
+  $('#sName').value=ED.name||'';$('#sKind').value=ED.kind||'conventional';$('#sRate').value=String(ED.rate||1920000);
+  $('#sGain').value=ED.gain||'LNA:40';$('#sDwell').value=ED.dwell||300;$('#sNotes').textContent=ED.notes||'';
+  const extra=RTLS.filter(r=>!r.aio);
+  $('#rtlList').innerHTML=extra.length?extra.map(r=>'<label style="margin-right:12px"><input type="checkbox" data-rtl="'+esc(r.serial)+'"'+((ED.rtls||[]).includes(r.serial)?' checked':'')+'> '+esc(r.maker+' '+r.product)+' SN '+esc(r.serial)+(r.holder?' <span class="muted">(in use by '+esc(r.holder)+')</span>':'')+'</label>').join(''):
+    '<span class="muted">Only the AIO RTL is connected. Plug in a second RTL-SDR to cover a second capture window continuously.</span>';
+  drawChRows();drawPlan();drawLpcn();
+}
+function chFromRows(){ED.channels=$$('#chRows tr').map(tr=>{const g=k=>tr.querySelector('[data-k="'+k+'"]').value.trim();
+  const ts=(n)=>{const tg=g('ts'+n+'tg'),lb=g('ts'+n+'lb');return tg||lb?{tg:tg?+tg:null,label:lb}:null;};
+  return {freq:g('freq'),label:g('label'),cc:g('cc')===''?null:+g('cc'),mode:g('mode'),ts1:ts(1),ts2:ts(2)};}).filter(c=>c.freq);}
+function drawChRows(){
+  $('#chRows').innerHTML=ED.channels.map((c,i)=>'<tr><td><input data-k="freq" value="'+esc(c.freq)+'" style="width:92px"></td><td><input data-k="label" value="'+esc(c.label||'')+'"></td>'+
+    '<td><input data-k="cc" value="'+(c.cc==null?'':c.cc)+'" style="width:44px"></td><td><select data-k="mode"><option value="dmr"'+(c.mode!=='fm'?' selected':'')+'>DMR</option><option value="fm"'+(c.mode==='fm'?' selected':'')+'>analog</option></select></td>'+
+    '<td><input data-k="ts1tg" value="'+((c.ts1&&c.ts1.tg)||'')+'" style="width:76px"></td><td><input data-k="ts1lb" value="'+esc((c.ts1&&c.ts1.label)||'')+'"></td>'+
+    '<td><input data-k="ts2tg" value="'+((c.ts2&&c.ts2.tg)||'')+'" style="width:76px"></td><td><input data-k="ts2lb" value="'+esc((c.ts2&&c.ts2.label)||'')+'"></td>'+
+    '<td><button class="sm" data-delch="'+i+'" title="remove">✕</button></td></tr>').join('');
+  $$('[data-delch]').forEach(b=>b.onclick=()=>{chFromRows();ED.channels.splice(+b.dataset.delch,1);drawChRows();drawPlan();});
+  $$('#chRows input[data-k="freq"]').forEach(i=>i.onchange=()=>{chFromRows();drawPlan();});
+}
+function readEd(){chFromRows();ED.name=$('#sName').value.trim()||'Site';ED.kind=$('#sKind').value;ED.rate=+$('#sRate').value;ED.gain=$('#sGain').value.trim()||'LNA:40';
+  ED.dwell=Math.max(60,+$('#sDwell').value||300);ED.rtls=$$('[data-rtl]').filter(c=>c.checked).map(c=>c.dataset.rtl);return ED;}
+$('#sRate').onchange=()=>{readEd();drawPlan();};
+$$('[data-rtl]');document.addEventListener('change',e=>{if(e.target.matches('[data-rtl]')){readEd();drawPlan();}});
+async function drawPlan(){
+  const s=readEd();const d=await api('/api/trbo/plan',s);const w=d.windows;const nrtl=1+(s.rtls||[]).length;
+  const fm=s.channels.filter(c=>c.mode==='fm').length;
+  let h=w.map((x,i)=>'<div class="win'+(i<nrtl?' mon':'')+'"><b>Window '+(i+1)+'</b> · tuned '+x.center.toFixed(4)+' MHz · '+(x.rate/1e6).toFixed(2)+' MS/s · span '+(x.span*1000).toFixed(0)+' kHz'+(x.ok?'':' <span class="stat-bad">⚠ too wide</span>')+'<br>'+x.freqs.map(f=>'<span class="pill">'+f.replace(/0+$/,'')+'</span>').join('')+'</div>').join('');
+  if(!w.length)h='<div class="muted">Add DMR channels to see the plan.</div>';
+  else if(w.length<=nrtl)h+='<div class="okbox small">Every DMR channel is watched continuously ('+w.length+' window'+(w.length>1?'s':'')+', '+nrtl+' RTL'+(nrtl>1?'s':'')+').</div>';
+  else h+='<div class="warnbox small">'+w.length+' windows but '+nrtl+' RTL'+(nrtl>1?'s':'')+': windows take turns every '+s.dwell+' s, so each channel is watched about '+Math.round(nrtl/w.length*100)+'% of the time. Utilization is corrected for this; call counts are not. Add '+(w.length-nrtl)+' more RTL'+(w.length-nrtl>1?'s':'')+' for full coverage.</div>';
+  if(fm)h+='<div class="small muted">'+fm+' analog channel'+(fm>1?'s':'')+' listed for reference; not decoded or counted.</div>';
+  $('#planBox').innerHTML=h;
+}
+function drawLpcn(){const rows=(LIVE&&LIVE.lpcn)||[];$('#lpcnPanel').style.display=ED.kind==='capmax'?'':'none';
+  $('#lpcnRows').innerHTML=rows.map(r=>'<tr><td class="mono">'+r.lpcn+'</td><td class="mono">'+r.freq+'</td><td class="muted">'+r.how+'</td><td><button class="sm" data-dl="'+r.lpcn+'">✕</button></td></tr>').join('')||'<tr><td colspan="4" class="muted">none yet</td></tr>';
+  $$('[data-dl]').forEach(b=>b.onclick=async()=>{await api('/api/trbo/lpcn',{lpcn:+b.dataset.dl});setTimeout(drawLpcn,1200);});}
+$('#lpcnAdd').onclick=async()=>{const n=+$('#lpcnN').value,f=$('#lpcnF').value;if(!n||!f)return;await api('/api/trbo/lpcn',{lpcn:n,freq:f});setTimeout(drawLpcn,1200);};
+$('#sKind').onchange=()=>{ED.kind=$('#sKind').value;drawLpcn();};
+$('#addCh').onclick=()=>{chFromRows();ED.channels.push({freq:'',label:'',cc:null,mode:'dmr'});drawChRows();};
+$('#newSite').onclick=()=>edit(null);
+$('#saveSite').onclick=async()=>{const r=await api('/api/trbo/sites',readEd());ED=r.site;loadSites();};
+$('#saveStart').onclick=async()=>{const r=await api('/api/trbo/sites',readEd());ED=r.site;await api('/api/trbo/activate',{site:r.site.id,enabled:true});loadSites();$$('#tabs button')[0].click();};
+$('#delSite').onclick=async()=>{if(!ED.id||!confirm('Delete site "'+ED.name+'"? Logged traffic stays in the database.'))return;await api('/api/trbo/sites/delete',{id:ED.id});ED=null;loadSites();};
+async function rrImport(merge){const d=await api('/api/trbo/import_rr',{text:$('#rrText').value});chFromRows();
+  if(!merge)ED.channels=d.channels;else d.channels.forEach(c=>{const i=ED.channels.findIndex(x=>(+x.freq).toFixed(5)===c.freq);if(i>=0)ED.channels[i]=Object.assign(ED.channels[i],c);else ED.channels.push(c);});
+  ED.channels.sort((a,b)=>a.freq-b.freq);$('#rrNote').textContent=d.channels.length+' frequencies read';drawChRows();drawPlan();}
+$('#rrReplace').onclick=()=>rrImport(false);$('#rrMerge').onclick=()=>rrImport(true);
+
+/* ---------------- header "today" counters + periodic refresh */
+async function today(){try{const d=new Date();d.setHours(0,0,0,0);const s=await api('/api/trbo/stats?from='+d.getTime()/1000);
+  $('#hcalls').textContent=s.totals.calls;$('#hair').textContent=hms(s.totals.air);$('#hpos').textContent=s.totals.positions;
+  }catch(e){}setTimeout(today,30000);}
+setInterval(()=>{if(view==='traffic'&&!document.hidden)loadStats();if(view==='map'&&!document.hidden)loadMap(false);},60000);
+addEventListener('resize',()=>{if(STATS&&view==='traffic'){drawHours();drawHeat();}});
+poll();today();loadSites();setTimeout(loadTgList,1500);
+</script>
+</body>
+</html>

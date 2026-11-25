@@ -14,6 +14,7 @@ import os, re, json, time, threading, queue, collections, subprocess, signal, at
 import urllib.request
 import numpy as np
 import db                                 # SQLite flat-file store (systems / tags / rids)
+import trbo                               # TRBO Monitor: MOTOTRBO / DMR repeaters + Capacity Max, usage logging (/trbo)
 try:
     import signalid                       # multi-protocol carrier classifier (POCSAG/FLEX/analog/spectral)
 except Exception:
@@ -1183,6 +1184,9 @@ def _reader(p):
             if lf:
                 try: lf.write(line)
                 except Exception: pass
+            if OP25.get("trbo"):
+                trbo.feed(line)
+                continue
             parse_line(line)
             if "(0x" not in line[:60]: xlog_line(line)
     except Exception:
@@ -1192,8 +1196,29 @@ def _reader(p):
             try: lf.close()
             except Exception: pass
 
+OP25_START_LOCK = threading.Lock()
+
 def op25_start():
+    with OP25_START_LOCK:
+        _op25_start()
+
+def _op25_start():
     op25_stop(); reset_state(); diag_reset()
+    OP25["trbo"] = False; trbo.RUN["on"] = False
+    if trbo.active():                       # TRBO Monitor: DMR repeaters / Capacity Max, see trbo.py
+        try:
+            time.sleep(1.0)                 # let the old multi_rx release the dongle before the next one opens it
+            if not trbo.ensure_rtl(): raise RuntimeError("RTL-SDR not found on USB (rail cycle didn't bring it back)")
+            cfg = trbo.build_cfg()
+            env = dict(os.environ); env["PYTHONPATH"] = HERE + os.pathsep + env.get("PYTHONPATH", "")   # tk_lgslot.py lives here
+            p = subprocess.Popen([OP25_PY, "multi_rx.py", "-v", "10", "-c", cfg], env=env,
+                                 cwd=APPS, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+            OP25.update(proc=p, running=True, error=None, since=time.time(), trbo=True); trbo.RUN["on"] = True
+            threading.Thread(target=_reader, args=(p,), daemon=True).start()
+        except Exception as e:
+            OP25["error"] = "TRBO: %s" % e; OP25["running"] = False; trbo.RUN["err"] = str(e)
+        return
+    trbo.release_devices()
     sid = RUN_TEMP[0] if RUN_TEMP[0] in TEMP_SYS else SYSTEMS.get("active")
     if not sid or (sid not in SYSTEMS["systems"] and sid not in TEMP_SYS):
         OP25["error"] = "no active system"; return
@@ -3174,6 +3199,10 @@ try:
     signal.signal(signal.SIGTERM, lambda *_a: (_graceful(), os._exit(0)))
 except Exception:
     pass
+
+trbo.register(app, {"publish": publish, "record_position": record_position, "op25_start": op25_start,
+                    "op25_stop": op25_stop, "op25_running": lambda: bool(OP25.get("running")) and OP25.get("proc") is not None
+                    and OP25["proc"].poll() is None, "dev": DEV, "tmp": TMP, "rid_alias": rid_alias, "tg_tag": tg_tag})
 
 if __name__ == "__main__":
     threading.Thread(target=diag_poll_loop, daemon=True).start()
